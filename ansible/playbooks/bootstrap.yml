@@ -46,6 +46,23 @@
       community.general.timezone:
         name: "{{ cluster_timezone }}"
 
+    - name: Configure inotify limits for Kubernetes workloads
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/90-homelab-k3s.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          fs.inotify.max_user_instances = 1024
+          fs.inotify.max_user_watches = 1048576
+          fs.inotify.max_queued_events = 32768
+      register: inotify_limits
+
+    - name: Apply inotify limits
+      ansible.builtin.command: sysctl -p /etc/sysctl.d/90-homelab-k3s.conf
+      when: inotify_limits.changed
+      changed_when: false
+
     - name: Disable swap immediately
       ansible.builtin.command: swapoff -a
       changed_when: false
@@ -170,6 +187,12 @@
         - cert-manager-values.yaml
         - external-secrets-values.yaml
 
+    - name: Check whether the root GitOps Application exists
+      ansible.builtin.command: k3s kubectl -n argocd get application homelab
+      register: root_application
+      changed_when: false
+      failed_when: false
+
     - name: Install cert-manager
       ansible.builtin.command: >-
         helm upgrade --install cert-manager jetstack/cert-manager
@@ -179,16 +202,20 @@
         --kubeconfig /etc/rancher/k3s/k3s.yaml
         --wait --timeout 10m
       changed_when: true
+      when: root_application.rc != 0
 
     - name: Check for the External Secrets namespace
       ansible.builtin.command: k3s kubectl get namespace external-secrets
       register: external_secrets_namespace
       changed_when: false
       failed_when: false
+      when: root_application.rc != 0
 
     - name: Create the External Secrets namespace
       ansible.builtin.command: k3s kubectl create namespace external-secrets
-      when: external_secrets_namespace.rc != 0
+      when:
+        - root_application.rc != 0
+        - external_secrets_namespace.rc != 0
       changed_when: true
 
     - name: Copy Bitwarden SDK certificate resources
@@ -198,18 +225,21 @@
         owner: root
         group: root
         mode: '0644'
+      when: root_application.rc != 0
 
     - name: Create Bitwarden SDK certificates
       ansible.builtin.command: >-
         k3s kubectl apply -f /var/lib/rancher/k3s/server/bitwarden-sdk-certificates.yaml
       register: bitwarden_certificates
       changed_when: bitwarden_certificates.stdout is not search('unchanged')
+      when: root_application.rc != 0
 
     - name: Wait for the Bitwarden SDK certificate
       ansible.builtin.command: >-
         k3s kubectl -n external-secrets wait
         --for=condition=Ready certificate/bitwarden-sdk-server --timeout=5m
       changed_when: false
+      when: root_application.rc != 0
 
     - name: Install External Secrets Operator
       ansible.builtin.command: >-
@@ -220,6 +250,7 @@
         --kubeconfig /etc/rancher/k3s/k3s.yaml
         --wait --timeout 10m
       changed_when: true
+      when: root_application.rc != 0
 
     - name: Install Argo CD
       ansible.builtin.command: >-
@@ -230,6 +261,7 @@
         --kubeconfig /etc/rancher/k3s/k3s.yaml
         --wait --timeout 10m
       changed_when: true
+      when: root_application.rc != 0
 
     - name: Create the Bitwarden bootstrap token secret
       kubernetes.core.k8s:
@@ -245,6 +277,7 @@
           stringData:
             token: "{{ bws_access_token }}"
       no_log: true
+      when: root_application.rc != 0
 
     - name: Create the private Git repository credential
       kubernetes.core.k8s:
@@ -265,12 +298,22 @@
             username: "{{ github_username }}"
             password: "{{ github_token }}"
       no_log: true
+      when: root_application.rc != 0
+
+    - name: Copy the root Argo CD application
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../bootstrap/root-application.yaml"
+        dest: /var/lib/rancher/k3s/server/root-application.yaml
+        owner: root
+        group: root
+        mode: '0644'
 
     - name: Apply the root Argo CD application
       kubernetes.core.k8s:
         kubeconfig: /etc/rancher/k3s/k3s.yaml
         state: present
-        src: "{{ playbook_dir }}/../../bootstrap/root-application.yaml"
+        src: /var/lib/rancher/k3s/server/root-application.yaml
+      when: root_application.rc != 0
 
     - name: Copy kubeconfig for the operator
       ansible.builtin.fetch:
