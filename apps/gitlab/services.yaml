@@ -32,4 +32,4 @@ spec:
   selector:
     app.kubernetes.io/name: gitlab
   ports:
-    - {name: registry, port: 5000, targetPort: registry}
+    - {name: registry, port: 5000, targetPort: web}

@@ -60,7 +60,7 @@ spec:
                   'X-Forwarded-Ssl' => 'on'
                 }
                 registry_external_url 'https://registry.mmlinaric.com'
-                registry_nginx['listen_port'] = 5000
+                registry_nginx['listen_port'] = 8080
                 registry_nginx['listen_https'] = false
                 gitlab_rails['registry_enabled'] = true
                 gitlab_rails['registry_host'] = 'registry.mmlinaric.com'
@@ -107,7 +107,6 @@ spec:
                 gitlab_rails['backup_keep_time'] = 172800
           ports:
             - {name: web, containerPort: 8080}
-            - {name: registry, containerPort: 5000}
           startupProbe:
             httpGet: {path: /-/readiness, port: web}
             periodSeconds: 10

@@ -15,4 +15,3 @@ spec:
               kubernetes.io/metadata.name: traefik
       ports:
         - {protocol: TCP, port: 8080}
-        - {protocol: TCP, port: 5000}
