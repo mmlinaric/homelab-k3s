@@ -52,8 +52,6 @@ spec:
               cpu: "1"
               memory: 1Gi
               ephemeral-storage: 4Gi
-          extraArgs:
-            - --node-agent-configmap=velero-node-agent-config
         configuration:
           backupStorageLocation:
             - name: default
@@ -78,7 +76,6 @@ spec:
           defaultVolumesToFsBackup: false
           extraArgs:
             - --backup-repository-configmap=velero-backup-repository-config
-            - --node-agent-configmap=velero-node-agent-config
           extraEnvVars:
             - name: TZ
               value: Europe/Warsaw
