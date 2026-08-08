@@ -60,7 +60,6 @@ metadata:
   namespace: velero
 spec:
   schedule: "0 3 * * *"
-  skipImmediately: true
   template:
     includedNamespaces:
       - gitlab
@@ -100,7 +99,6 @@ metadata:
   namespace: velero
 spec:
   schedule: "0 5 * * 0"
-  skipImmediately: true
   template:
     includedNamespaces:
       - gitlab
@@ -140,7 +138,6 @@ metadata:
   namespace: velero
 spec:
   schedule: "0 7 1 * *"
-  skipImmediately: true
   template:
     includedNamespaces:
       - gitlab
@@ -180,7 +177,6 @@ metadata:
   namespace: velero
 spec:
   schedule: "0 2 * * *"
-  skipImmediately: true
   template:
     includedNamespaces:
       - keycloak
@@ -218,7 +214,6 @@ metadata:
   namespace: velero
 spec:
   schedule: "0 4 * * 0"
-  skipImmediately: true
   template:
     includedNamespaces:
       - keycloak
@@ -256,7 +251,6 @@ metadata:
   namespace: velero
 spec:
   schedule: "0 6 1 * *"
-  skipImmediately: true
   template:
     includedNamespaces:
       - keycloak
