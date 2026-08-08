@@ -180,6 +180,37 @@
         --wait --timeout 10m
       changed_when: true
 
+    - name: Check for the External Secrets namespace
+      ansible.builtin.command: k3s kubectl get namespace external-secrets
+      register: external_secrets_namespace
+      changed_when: false
+      failed_when: false
+
+    - name: Create the External Secrets namespace
+      ansible.builtin.command: k3s kubectl create namespace external-secrets
+      when: external_secrets_namespace.rc != 0
+      changed_when: true
+
+    - name: Copy Bitwarden SDK certificate resources
+      ansible.builtin.copy:
+        src: ../files/bitwarden-sdk-certificates.yaml
+        dest: /var/lib/rancher/k3s/server/bitwarden-sdk-certificates.yaml
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Create Bitwarden SDK certificates
+      ansible.builtin.command: >-
+        k3s kubectl apply -f /var/lib/rancher/k3s/server/bitwarden-sdk-certificates.yaml
+      register: bitwarden_certificates
+      changed_when: bitwarden_certificates.stdout is not search('unchanged')
+
+    - name: Wait for the Bitwarden SDK certificate
+      ansible.builtin.command: >-
+        k3s kubectl -n external-secrets wait
+        --for=condition=Ready certificate/bitwarden-sdk-server --timeout=5m
+      changed_when: false
+
     - name: Install External Secrets Operator
       ansible.builtin.command: >-
         helm upgrade --install external-secrets external-secrets/external-secrets
