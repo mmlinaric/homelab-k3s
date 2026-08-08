@@ -36,6 +36,13 @@ spec:
   enableSuperuserAccess: true
   superuserSecret:
     name: keycloak-superuser
+  managed:
+    roles:
+      - name: keycloak
+        ensure: present
+        login: true
+        passwordSecret:
+          name: keycloak-database
   bootstrap:
     initdb:
       database: keycloak
