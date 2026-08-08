@@ -12,6 +12,8 @@ Keep an odd number of server nodes. Spread them across independent Proxmox failu
 
 Add a Longhorn disk on each node, verify replica scheduling, then change the default replica count from 1 to 3. Rebuild existing volumes to three healthy replicas before testing a node shutdown. Capacity must cover three copies plus backup and rebuild headroom.
 
+Velero deploys one node-agent pod per node automatically. Keep data movement concurrency at one per node until backup duration and workload impact have been measured. The GitLab and Keycloak staging PVCs remain ReadWriteOnce and move with their owning pods.
+
 ## Workloads
 
 - Increase Keycloak to at least two instances.

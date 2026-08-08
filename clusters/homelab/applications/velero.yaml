@@ -1,0 +1,136 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: default
+  source:
+    repoURL: https://vmware-tanzu.github.io/helm-charts
+    chart: velero
+    targetRevision: 12.1.0
+    helm:
+      valuesObject:
+        namespace:
+          labels:
+            pod-security.kubernetes.io/enforce: privileged
+            pod-security.kubernetes.io/audit: privileged
+            pod-security.kubernetes.io/warn: privileged
+        image:
+          tag: v1.18.1
+        initContainers:
+          - name: velero-plugin-for-aws
+            image: docker.io/velero/velero-plugin-for-aws:v1.14.2
+            imagePullPolicy: IfNotPresent
+            volumeMounts:
+              - name: plugins
+                mountPath: /target
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+            ephemeral-storage: 100Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+            ephemeral-storage: 1Gi
+        credentials:
+          useSecret: false
+        backupsEnabled: true
+        snapshotsEnabled: false
+        deployNodeAgent: true
+        nodeAgent:
+          disableHostPath: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+              ephemeral-storage: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+              ephemeral-storage: 4Gi
+          extraArgs:
+            - --node-agent-configmap=velero-node-agent-config
+        configuration:
+          backupStorageLocation:
+            - name: default
+              provider: aws
+              bucket: mmlinaric-homelab-velero
+              prefix: homelab
+              default: true
+              accessMode: ReadWrite
+              credential:
+                name: velero-credentials
+                key: cloud
+              config:
+                region: de
+                s3ForcePathStyle: "true"
+                s3Url: https://s3.de.io.cloud.ovh.net
+          volumeSnapshotLocation: []
+          uploaderType: kopia
+          features: EnableCSI
+          defaultItemOperationTimeout: 4h
+          dataMoverPrepareTimeout: 30m
+          defaultSnapshotMoveData: false
+          defaultVolumesToFsBackup: false
+          extraArgs:
+            - --backup-repository-configmap=velero-backup-repository-config
+            - --node-agent-configmap=velero-node-agent-config
+          extraEnvVars:
+            - name: TZ
+              value: Europe/Warsaw
+          repositoryMaintenanceJob:
+            repositoryConfigData:
+              name: velero-repo-maintenance
+              global:
+                podResources:
+                  cpuRequest: 100m
+                  cpuLimit: 500m
+                  memoryRequest: 256Mi
+                  memoryLimit: 1Gi
+                keepLatestMaintenanceJobs: 3
+              repositories: {}
+        metrics:
+          enabled: true
+          serviceMonitor:
+            enabled: true
+            additionalLabels:
+              release: kube-prometheus-stack
+          nodeAgentPodMonitor:
+            enabled: true
+            additionalLabels:
+              release: kube-prometheus-stack
+        configMaps:
+          backup-repository-config:
+            data:
+              kopia: |
+                {
+                  "cacheLimitMB": 2048,
+                  "fullMaintenanceInterval": "normalGC"
+                }
+          node-agent-config:
+            data:
+              config.json: |
+                {
+                  "loadConcurrency": {
+                    "globalConfig": 1,
+                    "prepareQueueLength": 2
+                  },
+                  "podResources": {
+                    "cpuRequest": "250m",
+                    "cpuLimit": "1",
+                    "memoryRequest": "512Mi",
+                    "memoryLimit": "2Gi",
+                    "ephemeralStorageRequest": "2Gi",
+                    "ephemeralStorageLimit": "8Gi"
+                  }
+                }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: velero
+  syncPolicy:
+    automated: {enabled: true, prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]

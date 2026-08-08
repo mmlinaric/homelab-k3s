@@ -14,10 +14,10 @@ spec:
   data:
     - secretKey: admin-user
       remoteRef:
-        key: CHANGE_ME_BWS_GRAFANA_ADMIN_USER_ID
+        key: a5c6104b-5e80-4618-ae88-b4a0011fe6e8
     - secretKey: admin-password
       remoteRef:
-        key: CHANGE_ME_BWS_GRAFANA_ADMIN_PASSWORD_ID
+        key: 4e261d13-6148-4a34-a15a-b4a0011fff64
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -38,7 +38,7 @@ spec:
   data:
     - secretKey: clientSecret
       remoteRef:
-        key: CHANGE_ME_BWS_GRAFANA_OIDC_CLIENT_SECRET_ID
+        key: 6336d9af-f100-4d3e-8e05-b4a00120b414
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -56,10 +56,10 @@ spec:
   data:
     - secretKey: bot-token
       remoteRef:
-        key: CHANGE_ME_BWS_TELEGRAM_BOT_TOKEN_ID
+        key: 3cdbe1d1-2fba-4ea9-841e-b4a001226841
     - secretKey: chat-id
       remoteRef:
-        key: CHANGE_ME_BWS_TELEGRAM_CHAT_ID
+        key: 7e8e734a-351d-4627-a32a-b4a001228587
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -114,15 +114,83 @@ spec:
             summary: "Certificate for {{ $labels.instance }} expires within 21 days"
     - name: homelab.backups
       rules:
-        - alert: BackupCronJobFailed
-          expr: kube_job_status_failed{namespace=~"gitlab|keycloak"} > 0
-          for: 5m
-          labels: {severity: critical}
-          annotations:
-            summary: "Backup job {{ $labels.job_name }} failed"
-        - alert: BackupCronJobMissing
-          expr: time() - kube_cronjob_status_last_successful_time{namespace="gitlab",cronjob="gitlab-backup"} > 30 * 3600
+        - alert: VeleroScheduledBackupFailed
+          expr: velero_backup_last_status{schedule=~"(gitlab|keycloak)-(daily|weekly|monthly)"} != 1
           for: 15m
           labels: {severity: critical}
           annotations:
-            summary: GitLab has no successful backup in the last 30 hours
+            summary: "Velero backup schedule {{ $labels.schedule }} failed"
+        - alert: GitLabLogicalBackupStale
+          expr: (time() - velero_backup_last_successful_timestamp{schedule="gitlab-daily"} > 30 * 3600) or absent(velero_backup_last_successful_timestamp{schedule="gitlab-daily"})
+          for: 1h
+          labels: {severity: critical}
+          annotations:
+            summary: GitLab has no successful Velero backup in the last 30 hours
+        - alert: KeycloakLogicalBackupStale
+          expr: (time() - velero_backup_last_successful_timestamp{schedule="keycloak-daily"} > 30 * 3600) or absent(velero_backup_last_successful_timestamp{schedule="keycloak-daily"})
+          for: 1h
+          labels: {severity: critical}
+          annotations:
+            summary: Keycloak has no successful encrypted logical backup in the last 30 hours
+        - alert: VeleroBackupPartiallyFailed
+          expr: increase(velero_backup_partial_failure_total{schedule=~"(gitlab|keycloak)-(daily|weekly|monthly)"}[8h]) > 0
+          for: 15m
+          labels: {severity: warning}
+          annotations:
+            summary: "Velero backup schedule {{ $labels.schedule }} partially failed"
+        - alert: KeycloakBackupStale
+          expr: >-
+            (time() - max(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace="keycloak"}) > 30 * 3600)
+            or absent(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace="keycloak"})
+          for: 1h
+          labels: {severity: critical}
+          annotations:
+            summary: Keycloak has no successful base backup in the last 30 hours
+        - alert: KeycloakBackupFailed
+          expr: >-
+            max(barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp{namespace="keycloak"})
+            > max(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace="keycloak"})
+          for: 15m
+          labels: {severity: critical}
+          annotations:
+            summary: The most recent Keycloak base backup attempt failed
+        - alert: KeycloakWalArchiveBacklog
+          expr: max(cnpg_collector_pg_wal_archive_status{namespace="keycloak",value="ready"}) > 5
+          for: 15m
+          labels: {severity: critical}
+          annotations:
+            summary: Keycloak WAL archiving has a sustained backlog
+        - alert: K3sEtcdSnapshotStale
+          expr: (max(k3s_etcd_snapshot_created_timestamp{location=~"s3://.*"}) < time() - 14 * 3600) or absent(k3s_etcd_snapshot_created_timestamp{location=~"s3://.*"})
+          for: 30m
+          labels: {severity: critical}
+          annotations:
+            summary: K3s has no recent S3 etcd snapshot
+        - alert: K3sEtcdSnapshotNotReady
+          expr: min(k3s_etcd_snapshot_ready{location=~"s3://.*"}) == 0
+          for: 15m
+          labels: {severity: critical}
+          annotations:
+            summary: At least one retained K3s S3 etcd snapshot is not ready
+        - alert: GitLabBackupStagingNearlyFull
+          expr: >-
+            kubelet_volume_stats_used_bytes{namespace="gitlab",persistentvolumeclaim="gitlab-backups"}
+            / kubelet_volume_stats_capacity_bytes{namespace="gitlab",persistentvolumeclaim="gitlab-backups"} > 0.8
+          for: 30m
+          labels: {severity: warning}
+          annotations:
+            summary: GitLab backup staging volume is more than 80 percent full
+        - alert: KeycloakBackupStagingNearlyFull
+          expr: >-
+            kubelet_volume_stats_used_bytes{namespace="keycloak",persistentvolumeclaim="keycloak-backups"}
+            / kubelet_volume_stats_capacity_bytes{namespace="keycloak",persistentvolumeclaim="keycloak-backups"} > 0.8
+          for: 30m
+          labels: {severity: warning}
+          annotations:
+            summary: Keycloak backup staging volume is more than 80 percent full
+        - alert: LonghornVolumeUnhealthy
+          expr: longhorn_volume_robustness{state=~"degraded|faulted"} == 1
+          for: 15m
+          labels: {severity: critical}
+          annotations:
+            summary: "Longhorn volume {{ $labels.pvc_namespace }}/{{ $labels.pvc }} is {{ $labels.state }}"

@@ -46,14 +46,14 @@ The operator returns Keycloak to one replica. Wait for readiness and test the ex
 
 The `gitlab-secrets.json` Bitwarden entry must contain the exported file before the first production restore. Sync the ExternalSecret, then recreate the GitLab pod if the old secret had already been copied into its config PVC.
 
-Copy the backup into the data PVC with a temporary pod:
+Copy the backup into the dedicated backup staging PVC with a temporary pod:
 
 ```bash
 kubectl -n gitlab scale statefulset gitlab --replicas=0
-kubectl -n gitlab run backup-loader --image=busybox:1.37.0 --restart=Never --overrides='{"spec":{"containers":[{"name":"backup-loader","image":"busybox:1.37.0","command":["sleep","3600"],"volumeMounts":[{"name":"data","mountPath":"/data"}]}],"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"data-gitlab-0"}}]}}'
+kubectl -n gitlab run backup-loader --image=busybox:1.37.0 --restart=Never --overrides='{"spec":{"containers":[{"name":"backup-loader","image":"busybox:1.37.0","command":["sleep","3600"],"volumeMounts":[{"name":"backups","mountPath":"/backups"}]}],"volumes":[{"name":"backups","persistentVolumeClaim":{"claimName":"gitlab-backups"}}]}}'
 kubectl -n gitlab wait pod/backup-loader --for=condition=Ready --timeout=120s
 backup_file="$(basename migration-final/*_gitlab_backup.tar)"
-kubectl -n gitlab cp "migration-final/${backup_file}" "backup-loader:/data/backups/${backup_file}"
+kubectl -n gitlab cp "migration-final/${backup_file}" "backup-loader:/backups/${backup_file}"
 kubectl -n gitlab delete pod backup-loader
 kubectl -n gitlab scale statefulset gitlab --replicas=1
 kubectl -n gitlab rollout status statefulset/gitlab --timeout=30m
@@ -76,7 +76,7 @@ kubectl -n gitlab exec gitlab-0 -- gitlab-rake gitlab:doctor:secrets
 2. Remove any workstation hosts-file overrides.
 3. Test Keycloak admin only from the LAN. Confirm public `/admin` and `/realms/master` routes return 404.
 4. Test GitLab OIDC, HTTPS Git operations, and registry operations.
-5. Trigger `gitlab-backup` and a CNPG backup, then confirm objects appear in Contabo S3.
+5. Create manual Velero backups from `gitlab-daily` and `keycloak-daily`, plus a manual CNPG backup. Confirm all three complete and objects appear in OVH Object Storage.
 6. Confirm Telegram receives a test alert.
 7. Keep the old host powered off but recoverable for at least one week. Decommission unused Compose applications only after that hold period.
 

@@ -8,8 +8,8 @@ metadata:
 spec:
   retentionPolicy: 30d
   configuration:
-    destinationPath: s3://CHANGE_ME_KEYCLOAK_BACKUP_BUCKET/keycloak
-    endpointURL: CHANGE_ME_CONTABO_S3_ENDPOINT
+    destinationPath: s3://mmlinaric-homelab-keycloak/keycloak
+    endpointURL: https://s3.de.io.cloud.ovh.net
     s3Credentials:
       accessKeyId:
         name: keycloak-barman-s3
@@ -77,4 +77,3 @@ spec:
   method: plugin
   pluginConfiguration:
     name: barman-cloud.cloudnative-pg.io
-

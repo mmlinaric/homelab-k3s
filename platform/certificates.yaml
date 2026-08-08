@@ -14,7 +14,7 @@ spec:
   data:
     - secretKey: api-token
       remoteRef:
-        key: CHANGE_ME_BWS_CLOUDFLARE_DNS_API_TOKEN_ID
+        key: 309102a9-e7fa-4f8b-8b6d-b4a0011e68a0
 ---
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -55,4 +55,3 @@ spec:
         selector:
           dnsZones:
             - mmlinaric.com
-

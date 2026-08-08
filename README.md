@@ -12,7 +12,7 @@ LAN DNS  -> 192.168.70.100 -> Traefik websecure entrypoint -> all LAN routes
                                       |
                        Longhorn PVCs and CNPG
                                       |
-                         Contabo S3 backups
+                        OVH Object Storage
 
 Operator -> 192.168.70.5 -> kube-vip -> K3s API
 Git push -> GitHub main -> Argo CD auto-sync
@@ -30,12 +30,13 @@ The first node is `192.168.70.10`. MetalLB assigns `192.168.70.100` to Traefik, 
 | `clusters/homelab/` | App of apps definitions and pinned Helm releases |
 | `platform/` | Shared networking, certificates, secrets, storage, and monitoring config |
 | `apps/` | GitLab, Keycloak, and Cloudflare Tunnel workloads |
+| `recovery/` | Isolated, manually applied disaster recovery overlays |
 | `scripts/` | Local validation and migration export helpers |
 | `docs/` | Bootstrap, secrets, migration, restore, and scaling runbooks |
 
 ## Start here
 
-1. Read [docs/secrets.md](docs/secrets.md) and replace every `CHANGE_ME` value.
+1. Read [docs/secrets.md](docs/secrets.md) and replace every deployment `CHANGE_ME` value. Set the recovery target placeholder only when running a PITR drill.
 2. Follow [docs/bootstrap.md](docs/bootstrap.md) to prepare and bootstrap the new server.
 3. Confirm the new services using temporary local DNS overrides.
 4. Follow [docs/migration.md](docs/migration.md) for the cutover.
@@ -49,7 +50,9 @@ The design targets a 24-hour RPO and uses several independent layers:
 
 | Data | Mechanism | Schedule |
 | --- | --- | --- |
-| K3s control plane | Encrypted etcd snapshots to Contabo S3 | Every 12 hours |
-| GitLab application data | Native GitLab backup, then encrypted Restic to S3 | Daily |
-| Keycloak database | CNPG Barman WAL archive and base backup to S3 | Continuous WAL, daily base backup |
-| Persistent volumes | Longhorn recurring backups to S3 | Daily, weekly, monthly |
+| K3s control plane | Encrypted etcd snapshots to OVH Object Storage | Every 12 hours |
+| GitLab application data | Native GitLab backup staged on a dedicated PVC, then Velero CSI data movement with Kopia to S3 | Daily, weekly, monthly |
+| Keycloak database | CNPG Barman WAL and base backups, plus a logical dump moved through Velero and Kopia | Continuous WAL, daily base backup, daily, weekly, and monthly logical backups |
+| Local recovery points | Longhorn snapshots with integrity checks | Daily snapshots, weekly cleanup and integrity check |
+
+Velero is intentionally not used for the live GitLab or Keycloak database volumes. Application-native backups provide the consistency boundary, and Velero moves the GitLab and Keycloak staging PVCs off site. See [docs/backups.md](docs/backups.md) for retention, verification, and recovery details.

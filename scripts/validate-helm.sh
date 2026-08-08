@@ -7,6 +7,7 @@ helm repo add external-secrets https://charts.external-secrets.io --force-update
 helm repo add metallb https://metallb.github.io/metallb --force-update
 helm repo add traefik https://traefik.github.io/charts --force-update
 helm repo add longhorn https://charts.longhorn.io --force-update
+helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts --force-update
 helm repo add cnpg https://cloudnative-pg.github.io/charts --force-update
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update
 helm repo update
@@ -32,6 +33,7 @@ render_application external-secrets external-secrets/external-secrets 2.9.0 exte
 render_application metallb metallb/metallb 0.16.1 metallb-system clusters/homelab/applications/metallb.yaml
 render_application traefik traefik/traefik 41.2.0 traefik clusters/homelab/applications/traefik.yaml
 render_application longhorn longhorn/longhorn 1.12.0 longhorn-system clusters/homelab/applications/longhorn.yaml
+render_application velero vmware-tanzu/velero 12.1.0 velero clusters/homelab/applications/velero.yaml
 render_application cloudnative-pg cnpg/cloudnative-pg 0.29.0 cnpg-system clusters/homelab/applications/cloudnative-pg.yaml
 render_application monitoring prometheus-community/kube-prometheus-stack 88.2.0 monitoring clusters/homelab/applications/kube-prometheus-stack.yaml
 render_application blackbox prometheus-community/prometheus-blackbox-exporter 11.16.0 monitoring clusters/homelab/applications/blackbox-exporter.yaml

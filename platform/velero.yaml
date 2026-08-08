@@ -1,0 +1,288 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: velero-credentials
+  namespace: velero
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: bitwarden
+    kind: ClusterSecretStore
+  target:
+    name: velero-credentials
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        cloud: |
+          [default]
+          aws_access_key_id={{ .accessKey }}
+          aws_secret_access_key={{ .secretKey }}
+  data:
+    - secretKey: accessKey
+      remoteRef:
+        key: 9443a062-f057-4ca7-843f-b4a001165b16
+    - secretKey: secretKey
+      remoteRef:
+        key: d4fd7569-bb31-4793-9de5-b4a0011671e9
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: velero-repo-credentials
+  namespace: velero
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: bitwarden
+    kind: ClusterSecretStore
+  target:
+    name: velero-repo-credentials
+    creationPolicy: Owner
+  data:
+    - secretKey: repository-password
+      remoteRef:
+        key: 0efd9545-562f-4bf6-b622-b4a00117d60c
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: longhorn-velero
+  labels:
+    velero.io/csi-volumesnapshot-class: "true"
+driver: driver.longhorn.io
+deletionPolicy: Delete
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: gitlab-daily
+  namespace: velero
+spec:
+  schedule: "0 3 * * *"
+  skipImmediately: true
+  template:
+    includedNamespaces:
+      - gitlab
+    excludedResources:
+      - secrets
+    storageLocation: default
+    snapshotVolumes: true
+    snapshotMoveData: true
+    itemOperationTimeout: 4h
+    ttl: 336h
+    hooks:
+      resources:
+        - name: gitlab-native-backup
+          includedNamespaces:
+            - gitlab
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: gitlab
+          pre:
+            - exec:
+                container: gitlab
+                command:
+                  - /bin/sh
+                  - -ec
+                  - |
+                    mkdir -p /var/opt/gitlab/backups/config
+                    gitlab-backup create CRON=1
+                    gitlab-ctl backup-etc --backup-path /var/opt/gitlab/backups/config
+                    find /var/opt/gitlab/backups/config -maxdepth 1 -type f -mtime +3 -delete
+                onError: Fail
+                timeout: 2h
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: gitlab-weekly
+  namespace: velero
+spec:
+  schedule: "0 5 * * 0"
+  skipImmediately: true
+  template:
+    includedNamespaces:
+      - gitlab
+    excludedResources:
+      - secrets
+    storageLocation: default
+    snapshotVolumes: true
+    snapshotMoveData: true
+    itemOperationTimeout: 4h
+    ttl: 1344h
+    hooks:
+      resources:
+        - name: gitlab-native-backup
+          includedNamespaces:
+            - gitlab
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: gitlab
+          pre:
+            - exec:
+                container: gitlab
+                command:
+                  - /bin/sh
+                  - -ec
+                  - |
+                    mkdir -p /var/opt/gitlab/backups/config
+                    gitlab-backup create CRON=1
+                    gitlab-ctl backup-etc --backup-path /var/opt/gitlab/backups/config
+                    find /var/opt/gitlab/backups/config -maxdepth 1 -type f -mtime +3 -delete
+                onError: Fail
+                timeout: 2h
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: gitlab-monthly
+  namespace: velero
+spec:
+  schedule: "0 7 1 * *"
+  skipImmediately: true
+  template:
+    includedNamespaces:
+      - gitlab
+    excludedResources:
+      - secrets
+    storageLocation: default
+    snapshotVolumes: true
+    snapshotMoveData: true
+    itemOperationTimeout: 4h
+    ttl: 8784h
+    hooks:
+      resources:
+        - name: gitlab-native-backup
+          includedNamespaces:
+            - gitlab
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: gitlab
+          pre:
+            - exec:
+                container: gitlab
+                command:
+                  - /bin/sh
+                  - -ec
+                  - |
+                    mkdir -p /var/opt/gitlab/backups/config
+                    gitlab-backup create CRON=1
+                    gitlab-ctl backup-etc --backup-path /var/opt/gitlab/backups/config
+                    find /var/opt/gitlab/backups/config -maxdepth 1 -type f -mtime +3 -delete
+                onError: Fail
+                timeout: 2h
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: keycloak-daily
+  namespace: velero
+spec:
+  schedule: "0 2 * * *"
+  skipImmediately: true
+  template:
+    includedNamespaces:
+      - keycloak
+    excludedResources:
+      - secrets
+    labelSelector:
+      matchLabels:
+        backup.homelab/strategy: velero
+    storageLocation: default
+    snapshotVolumes: true
+    snapshotMoveData: true
+    itemOperationTimeout: 4h
+    ttl: 336h
+    hooks:
+      resources:
+        - name: keycloak-logical-backup
+          includedNamespaces:
+            - keycloak
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: keycloak-logical-backup
+          pre:
+            - exec:
+                container: postgres-client
+                command:
+                  - /bin/sh
+                  - /scripts/backup.sh
+                onError: Fail
+                timeout: 1h
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: keycloak-weekly
+  namespace: velero
+spec:
+  schedule: "0 4 * * 0"
+  skipImmediately: true
+  template:
+    includedNamespaces:
+      - keycloak
+    excludedResources:
+      - secrets
+    labelSelector:
+      matchLabels:
+        backup.homelab/strategy: velero
+    storageLocation: default
+    snapshotVolumes: true
+    snapshotMoveData: true
+    itemOperationTimeout: 4h
+    ttl: 1344h
+    hooks:
+      resources:
+        - name: keycloak-logical-backup
+          includedNamespaces:
+            - keycloak
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: keycloak-logical-backup
+          pre:
+            - exec:
+                container: postgres-client
+                command:
+                  - /bin/sh
+                  - /scripts/backup.sh
+                onError: Fail
+                timeout: 1h
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: keycloak-monthly
+  namespace: velero
+spec:
+  schedule: "0 6 1 * *"
+  skipImmediately: true
+  template:
+    includedNamespaces:
+      - keycloak
+    excludedResources:
+      - secrets
+    labelSelector:
+      matchLabels:
+        backup.homelab/strategy: velero
+    storageLocation: default
+    snapshotVolumes: true
+    snapshotMoveData: true
+    itemOperationTimeout: 4h
+    ttl: 8784h
+    hooks:
+      resources:
+        - name: keycloak-logical-backup
+          includedNamespaces:
+            - keycloak
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: keycloak-logical-backup
+          pre:
+            - exec:
+                container: postgres-client
+                command:
+                  - /bin/sh
+                  - /scripts/backup.sh
+                onError: Fail
+                timeout: 1h

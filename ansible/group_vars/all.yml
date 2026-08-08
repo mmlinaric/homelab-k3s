@@ -16,6 +16,6 @@ external_secrets_chart_version: 2.9.0
 gitops_repo_url: https://github.com/mmlinaric/homelab-k3s.git
 gitops_repo_revision: main
 
-bitwarden_organization_id: CHANGE_ME_BITWARDEN_ORGANIZATION_ID
-bitwarden_project_id: CHANGE_ME_BITWARDEN_PROJECT_ID
+bitwarden_organization_id: 4d8e230e-8a58-4810-95ac-b4480149e082
+bitwarden_project_id: 832e95c1-00d7-460f-a5db-b4a00118089a
 

@@ -7,6 +7,7 @@ resources:
   - applications/metallb.yaml
   - applications/traefik.yaml
   - applications/longhorn.yaml
+  - applications/velero.yaml
   - applications/cloudnative-pg.yaml
   - applications/barman-cloud.yaml
   - applications/keycloak-operator.yaml

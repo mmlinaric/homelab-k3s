@@ -18,7 +18,7 @@ spec:
   data:
     - secretKey: clientSecret
       remoteRef:
-        key: CHANGE_ME_BWS_ARGOCD_OIDC_CLIENT_SECRET_ID
+        key: 591c7850-1525-433d-a994-b4a0012197b7
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -47,4 +47,3 @@ spec:
           port: 80
   tls:
     secretName: argocd-tls
-

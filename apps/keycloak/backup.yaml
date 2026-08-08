@@ -1,0 +1,133 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: keycloak-backups
+  namespace: keycloak
+  labels:
+    backup.homelab/strategy: velero
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-logical-backup
+  namespace: keycloak
+data:
+  backup.sh: |
+    #!/bin/sh
+    set -eu
+
+    timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    archive="/backups/keycloak-${timestamp}.dump"
+    temporary="${archive}.tmp"
+
+    cleanup() {
+      rm -f "${temporary}"
+    }
+    trap cleanup EXIT HUP INT TERM
+
+    pg_dump \
+      --format=custom \
+      --compress=gzip:6 \
+      --no-owner \
+      --no-acl \
+      --file="${temporary}"
+    pg_restore --list "${temporary}" >/dev/null
+    mv "${temporary}" "${archive}"
+    (
+      cd /backups
+      sha256sum "$(basename "${archive}")" > "$(basename "${archive}").sha256"
+    )
+
+    find /backups -maxdepth 1 -type f \
+      \( -name 'keycloak-*.dump' -o -name 'keycloak-*.dump.sha256' \) \
+      -mtime +3 -delete
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak-logical-backup
+  namespace: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak-logical-backup
+    backup.homelab/strategy: velero
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak-logical-backup
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak-logical-backup
+        backup.homelab/strategy: velero
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 26
+        runAsGroup: 26
+        fsGroup: 26
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres-client
+          image: ghcr.io/cloudnative-pg/postgresql:18.1-standard-trixie
+          command: [sh, -c, "trap 'exit 0' TERM INT; sleep infinity & wait"]
+          env:
+            - name: PGHOST
+              value: keycloak-db-rw
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: keycloak
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-database
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-database
+                  key: password
+            - name: PGCONNECT_TIMEOUT
+              value: "10"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: backups
+              mountPath: /backups
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: backups
+          persistentVolumeClaim:
+            claimName: keycloak-backups
+        - name: scripts
+          configMap:
+            name: keycloak-logical-backup
+            defaultMode: 0555
+        - name: tmp
+          emptyDir: {}

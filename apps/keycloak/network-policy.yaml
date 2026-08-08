@@ -32,6 +32,9 @@ spec:
         - podSelector:
             matchLabels:
               app: keycloak
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: keycloak-logical-backup
       ports:
         - {protocol: TCP, port: 5432}
     - from:

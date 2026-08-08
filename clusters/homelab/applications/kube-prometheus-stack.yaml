@@ -106,6 +106,45 @@ spec:
             kubeControllerManager: false
             kubeSchedulerAlerting: false
             kubeSchedulerRecording: false
+        kube-state-metrics:
+          rbac:
+            extraRules:
+              - apiGroups: [k3s.cattle.io]
+                resources: [etcdsnapshotfiles]
+                verbs: [list, watch]
+          customResourceState:
+            enabled: true
+            config:
+              kind: CustomResourceStateMetrics
+              spec:
+                resources:
+                  - groupVersionKind:
+                      group: k3s.cattle.io
+                      version: v1
+                      kind: ETCDSnapshotFile
+                    metricNamePrefix: k3s
+                    labelsFromPath:
+                      name: [metadata, name]
+                      location: [spec, location]
+                    metrics:
+                      - name: etcd_snapshot_created_timestamp
+                        help: Unix timestamp when the K3s etcd snapshot was created.
+                        each:
+                          type: Gauge
+                          gauge:
+                            path: [status, creationTime]
+                      - name: etcd_snapshot_ready
+                        help: Whether the K3s etcd snapshot is ready for restore.
+                        each:
+                          type: Gauge
+                          gauge:
+                            path: [status, readyToUse]
+                      - name: etcd_snapshot_size_bytes
+                        help: Size of the K3s etcd snapshot in bytes.
+                        each:
+                          type: Gauge
+                          gauge:
+                            path: [status, size]
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

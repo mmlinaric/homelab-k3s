@@ -1,6 +1,49 @@
 # Secrets and configuration
 
-No secret value belongs in Git. Bitwarden Secrets Manager is the source of truth, and External Secrets Operator materializes Kubernetes Secrets.
+No secret value belongs in Git. Bitwarden Secrets Manager is the online source of truth, and External Secrets Operator materializes Kubernetes Secrets.
+
+## OVH Object Storage
+
+Create these three private S3-compatible buckets in one OVH Public Cloud region:
+
+```text
+mmlinaric-homelab-etcd
+mmlinaric-homelab-keycloak
+mmlinaric-homelab-velero
+```
+
+The names are already unique to this deployment and should be used exactly. Configure them as follows:
+
+- Enable OVHcloud Managed Key encryption on all three buckets.
+- Enable versioning on all three buckets.
+- Do not enable Object Lock initially. Velero repository maintenance, CNPG retention, and K3s retention must be able to delete objects. Add lock only after a restore and retention test proves the selected mode does not break cleanup.
+- Keep current versions in the Velero bucket for at least 400 days. Its monthly backup TTL is 366 days.
+- Let CNPG enforce the Keycloak 30-day recovery window. Keep non-current versions for 60 days if lifecycle rules are available.
+- Let K3s retain 28 snapshots. Keep non-current versions for 30 days if lifecycle rules are available.
+
+The prefixes are already declared in Git:
+
+| Bucket | Prefix |
+| --- | --- |
+| `mmlinaric-homelab-etcd` | `homelab/etcd` |
+| `mmlinaric-homelab-keycloak` | `keycloak` |
+| `mmlinaric-homelab-velero` | `homelab` |
+
+Use separate OVH S3 users and keys per bucket if the OVH project permissions allow useful bucket isolation. If they do not, the manifests still use distinct Bitwarden entries so the credentials can be separated later without changing workloads.
+
+The Barman and Velero endpoint placeholders require the full HTTPS URL:
+
+```text
+https://s3.<region-in-lowercase>.io.cloud.ovh.net
+```
+
+The K3s endpoint Bitwarden entry must contain only the host name, without `https://`:
+
+```text
+s3.<region-in-lowercase>.io.cloud.ovh.net
+```
+
+Kopia encrypts GitLab and Keycloak staging-volume data before upload. OVH managed encryption adds storage-side encryption and also covers Velero metadata, K3s snapshots, and Barman objects. Do not remove either layer.
 
 ## Bootstrap values
 
@@ -24,24 +67,29 @@ Create one Bitwarden secret per value below. Replace each `CHANGE_ME_BWS_*_ID` i
 | Area | Required values |
 | --- | --- |
 | Cloudflare | API token with DNS edit rights for the zone, tunnel credentials JSON |
-| Keycloak | database username and password, PostgreSQL superuser username and password, bootstrap admin username and password, S3 access key and secret key |
-| GitLab | existing `gitlab-secrets.json`, OIDC client secret, Restic repository, Restic password, S3 access key and secret key |
-| Grafana | admin username and password, Keycloak OIDC client secret |
+| Keycloak | database credentials, PostgreSQL superuser credentials, bootstrap admin credentials, Keycloak S3 access key and secret key |
+| GitLab | existing `gitlab-secrets.json`, OIDC client secret |
+| Velero | Velero S3 access key and secret key, permanent Kopia repository password |
+| Grafana | admin credentials, Keycloak OIDC client secret |
 | Alertmanager | Telegram bot token and numeric chat ID |
-| Longhorn | S3 access key and secret key |
-| K3s etcd | S3 access key, secret key, and bucket |
-| Shared S3 | endpoint and region |
+| K3s etcd | etcd S3 access key, secret key, bucket name, OVH endpoint host name, OVH region |
 | Argo CD | Keycloak OIDC client secret |
 
-Also replace these non-secret placeholders:
+Generate the Kopia repository password once, before the first Velero backup:
+
+```bash
+openssl rand -base64 48
+```
+
+Store it in Bitwarden and in the encrypted offline recovery kit. Never rotate it for an existing repository.
+
+Replace these non-secret placeholders directly in Git:
 
 ```text
 CHANGE_ME_BITWARDEN_ORGANIZATION_ID
 CHANGE_ME_BITWARDEN_PROJECT_ID
-CHANGE_ME_LONGHORN_BUCKET
-CHANGE_ME_KEYCLOAK_BACKUP_BUCKET
-CHANGE_ME_CONTABO_S3_ENDPOINT
-CHANGE_ME_CONTABO_REGION
+CHANGE_ME_OVH_S3_ENDPOINT
+CHANGE_ME_OVH_REGION
 ```
 
 Find every unresolved value with:
@@ -49,6 +97,8 @@ Find every unresolved value with:
 ```bash
 rg -n CHANGE_ME .
 ```
+
+`CHANGE_ME_RECOVERY_TARGET_RFC3339` is intentionally retained in the manual PITR overlay. Replace it only for a specific recovery drill. It is not part of the Argo CD deployment.
 
 ## Keycloak clients
 
@@ -62,6 +112,21 @@ Create confidential clients in the `homelab` realm:
 
 For Grafana, add a client role named `admin` and assign it only to administrators. The default mapped role is Viewer.
 
+## Offline recovery kit
+
+Keep an encrypted copy outside the cluster and outside Bitwarden. It must contain:
+
+- K3s server token and the K3s S3 endpoint, region, bucket, access key, and secret key
+- Velero S3 credentials and Kopia repository password
+- Keycloak S3 credentials
+- `gitlab-secrets.json`
+- Bitwarden organization, project, and recovery details
+- the Git repository URL and a read-only deploy credential
+- the pinned K3s, Velero, GitLab, CNPG, and Barman plugin versions
+- a copy of `restore.md`
+
+Update and decrypt-test the kit quarterly. Never leave a decrypted copy on the cluster node.
+
 ## Rotation
 
-External Secrets refreshes values hourly. Most applications need a rollout after credential rotation because environment variables are read at process start. Restart only the affected workload, then verify login and backup access.
+External Secrets refreshes values hourly. Most applications need a rollout after credential rotation because environment variables are read at process start. Restart only the affected workload, then verify login and backup access. The Kopia repository password is not a rotatable application credential.

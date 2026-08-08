@@ -23,16 +23,16 @@ spec:
   data:
     - secretKey: endpoint
       remoteRef:
-        key: CHANGE_ME_BWS_CONTABO_S3_ENDPOINT_ID
+        key: 10a96b58-3819-43f9-9db2-b4a001171df5
     - secretKey: accessKey
       remoteRef:
-        key: CHANGE_ME_BWS_ETCD_S3_ACCESS_KEY_ID
+        key: a4405a55-23b8-4894-a88f-b4a00116bab6
     - secretKey: secretKey
       remoteRef:
-        key: CHANGE_ME_BWS_ETCD_S3_SECRET_ACCESS_KEY_ID
+        key: 6113609e-d682-4d74-b7be-b4a00116c9ff
     - secretKey: bucket
       remoteRef:
-        key: CHANGE_ME_BWS_ETCD_S3_BUCKET_ID
+        key: 1a429142-9b22-44d9-ab3b-b4a00116ef01
     - secretKey: region
       remoteRef:
-        key: CHANGE_ME_BWS_CONTABO_S3_REGION_ID
+        key: f8681471-1722-4015-8b42-b4a001176dbc

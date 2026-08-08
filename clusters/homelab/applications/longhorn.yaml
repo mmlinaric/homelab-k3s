@@ -22,8 +22,6 @@ spec:
           defaultDataPath: /var/lib/longhorn
           storageOverProvisioningPercentage: 150
           storageMinimalAvailablePercentage: 15
-          backupTarget: s3://CHANGE_ME_LONGHORN_BUCKET@CHANGE_ME_CONTABO_REGION/
-          backupTargetCredentialSecret: longhorn-backup-credentials
           snapshotDataIntegrity: enabled
           snapshotDataIntegrityCronjob: 0 3 * * 0
         longhornUI:
@@ -41,4 +39,3 @@ spec:
     - group: longhorn.io
       kind: Node
       jsonPointers: [/spec/disks]
-

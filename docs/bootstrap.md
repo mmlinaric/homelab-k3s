@@ -32,11 +32,15 @@ kubectl get nodes -o wide
 kubectl -n argocd get applications
 kubectl get pods -A
 kubectl -n external-secrets get clustersecretstore bitwarden
-kubectl -n longhorn-system get settings.longhorn.io backup-target
+kubectl -n velero get backupstoragelocation,schedule
+kubectl -n velero get daemonset node-agent
+kubectl -n longhorn-system get recurringjobs.longhorn.io
 kubectl -n keycloak get cluster,backup,objectstore
+kubectl -n keycloak get deployment keycloak-logical-backup
+kubectl -n keycloak get pvc keycloak-backups
 ```
 
-All Argo CD Applications should become Healthy and Synced. Some workloads will remain Pending until their ExternalSecrets are Ready.
+All Argo CD Applications should become Healthy and Synced. Some workloads will remain Pending until their ExternalSecrets are Ready. The Velero backup storage location must report `Available` before creating the first backup.
 
 ## Network setup
 

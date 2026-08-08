@@ -8,5 +8,7 @@ resources:
   - k3s-backup.yaml
   - certificates.yaml
   - longhorn.yaml
+  - velero.yaml
   - argocd.yaml
   - monitoring.yaml
+  - backup-dashboard.yaml

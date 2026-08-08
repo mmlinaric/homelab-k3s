@@ -131,6 +131,7 @@ spec:
             - {name: config, mountPath: /etc/gitlab}
             - {name: logs, mountPath: /var/log/gitlab}
             - {name: data, mountPath: /var/opt/gitlab}
+            - {name: backups, mountPath: /var/opt/gitlab/backups}
             - {name: shm, mountPath: /dev/shm}
       volumes:
         - name: secrets-json
@@ -140,9 +141,15 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 256Mi
+        - name: backups
+          persistentVolumeClaim:
+            claimName: gitlab-backups
   volumeClaimTemplates:
     - metadata:
         name: config
+        labels:
+          backup.homelab/strategy: native
+          velero.io/exclude-from-backup: "true"
         annotations:
           argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
       spec:
@@ -152,6 +159,9 @@ spec:
           requests: {storage: 10Gi}
     - metadata:
         name: logs
+        labels:
+          backup.homelab/strategy: native
+          velero.io/exclude-from-backup: "true"
         annotations:
           argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
       spec:
@@ -161,10 +171,11 @@ spec:
           requests: {storage: 20Gi}
     - metadata:
         name: data
+        labels:
+          backup.homelab/strategy: native
+          velero.io/exclude-from-backup: "true"
         annotations:
           argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
-          recurring-job.longhorn.io/source: enabled
-          recurring-job-group.longhorn.io/default: enabled
       spec:
         accessModes: [ReadWriteOnce]
         storageClassName: longhorn

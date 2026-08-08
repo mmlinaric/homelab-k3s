@@ -3,7 +3,7 @@ kind: Kustomization
 resources:
   - secrets.yaml
   - database.yaml
+  - backup.yaml
   - keycloak.yaml
   - ingress.yaml
   - network-policy.yaml
-
