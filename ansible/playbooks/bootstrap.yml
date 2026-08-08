@@ -2,6 +2,8 @@
 - name: Bootstrap the homelab K3s server
   hosts: k3s_servers
   become: true
+  vars_files:
+    - ../group_vars/all.yml
   vars:
     k3s_server_token: "{{ lookup('env', 'K3S_SERVER_TOKEN') }}"
     bws_access_token: "{{ lookup('env', 'BWS_ACCESS_TOKEN') }}"
@@ -115,14 +117,14 @@
         mode: '0644'
 
     - name: Wait for the API virtual IP
-      ansible.builtin.uri:
-        url: "https://{{ k3s_api_vip }}:{{ k3s_api_port }}/readyz"
-        validate_certs: false
-        status_code: 200
+      ansible.builtin.command: >-
+        k3s kubectl --server=https://{{ k3s_api_vip }}:{{ k3s_api_port }}
+        get --raw=/readyz
       register: vip_ready
       retries: 30
       delay: 5
-      until: vip_ready.status == 200
+      until: vip_ready.rc == 0 and vip_ready.stdout is search('ok')
+      changed_when: false
 
     - name: Install Helm
       ansible.builtin.unarchive:
