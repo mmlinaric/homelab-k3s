@@ -24,6 +24,7 @@ spec:
           defaultDataPath: /var/lib/longhorn
           storageOverProvisioningPercentage: 150
           storageMinimalAvailablePercentage: 15
+          storageReservedPercentageForDefaultDisk: 20
           snapshotDataIntegrity: enabled
           snapshotDataIntegrityCronjob: 0 3 * * 0
         longhornUI:
