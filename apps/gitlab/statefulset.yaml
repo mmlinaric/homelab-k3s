@@ -99,7 +99,6 @@ spec:
                   }
                 ]
                 prometheus_monitoring['enable'] = false
-                grafana['enable'] = false
                 gitlab_pages['enable'] = false
                 gitlab_kas['enable'] = false
                 puma['worker_processes'] = 2
