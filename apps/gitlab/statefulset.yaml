@@ -180,4 +180,4 @@ spec:
         accessModes: [ReadWriteOnce]
         storageClassName: longhorn
         resources:
-          requests: {storage: 200Gi}
+          requests: {storage: 50Gi}
