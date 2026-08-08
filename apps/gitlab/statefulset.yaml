@@ -50,7 +50,7 @@ spec:
               value: |
                 external_url 'https://gitlab.mmlinaric.com'
                 letsencrypt['enable'] = false
-                nginx['listen_port'] = 8080
+                nginx['listen_port'] = 80
                 nginx['listen_https'] = false
                 nginx['proxy_set_headers'] = {
                   'Host' => '$http_host_with_default',
@@ -60,8 +60,8 @@ spec:
                   'X-Forwarded-Ssl' => 'on'
                 }
                 registry_external_url 'https://registry.mmlinaric.com'
-                registry_nginx['listen_port'] = 8080
-                registry_nginx['listen_https'] = false
+                registry['nginx']['listen_port'] = 80
+                registry['nginx']['listen_https'] = false
                 gitlab_rails['registry_enabled'] = true
                 gitlab_rails['registry_host'] = 'registry.mmlinaric.com'
                 gitlab_rails['registry_port'] = '443'
@@ -106,7 +106,7 @@ spec:
                 postgresql['shared_buffers'] = '256MB'
                 gitlab_rails['backup_keep_time'] = 172800
           ports:
-            - {name: web, containerPort: 8080}
+            - {name: web, containerPort: 80}
           startupProbe:
             httpGet: {path: /-/readiness, port: web}
             periodSeconds: 10
