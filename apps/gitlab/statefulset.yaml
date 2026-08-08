@@ -108,17 +108,32 @@ spec:
           ports:
             - {name: web, containerPort: 80}
           startupProbe:
-            httpGet: {path: /-/readiness, port: web}
+            httpGet:
+              path: /-/readiness
+              port: web
+              httpHeaders:
+                - name: Host
+                  value: gitlab.mmlinaric.com
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 120
           readinessProbe:
-            httpGet: {path: /-/readiness, port: web}
+            httpGet:
+              path: /-/readiness
+              port: web
+              httpHeaders:
+                - name: Host
+                  value: gitlab.mmlinaric.com
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6
           livenessProbe:
-            httpGet: {path: /-/liveness, port: web}
+            httpGet:
+              path: /-/liveness
+              port: web
+              httpHeaders:
+                - name: Host
+                  value: gitlab.mmlinaric.com
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 6
