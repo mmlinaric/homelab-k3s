@@ -8,6 +8,7 @@ metadata:
 spec:
   instances: 1
   image: quay.io/keycloak/keycloak:26.7.1
+  startOptimized: false
   bootstrapAdmin:
     user:
       secret: keycloak-bootstrap-admin
@@ -51,4 +52,3 @@ spec:
     limits:
       cpu: 2
       memory: 2Gi
-
