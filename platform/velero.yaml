@@ -52,6 +52,8 @@ metadata:
     velero.io/csi-volumesnapshot-class: "true"
 driver: driver.longhorn.io
 deletionPolicy: Delete
+parameters:
+  type: snap
 ---
 apiVersion: velero.io/v1
 kind: Schedule
