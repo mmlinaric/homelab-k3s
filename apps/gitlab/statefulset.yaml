@@ -159,7 +159,9 @@ spec:
           persistentVolumeClaim:
             claimName: gitlab-backups
   volumeClaimTemplates:
-    - metadata:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
         name: config
         labels:
           backup.homelab/strategy: native
@@ -171,7 +173,9 @@ spec:
         storageClassName: longhorn
         resources:
           requests: {storage: 10Gi}
-    - metadata:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
         name: logs
         labels:
           backup.homelab/strategy: native
@@ -183,7 +187,9 @@ spec:
         storageClassName: longhorn
         resources:
           requests: {storage: 20Gi}
-    - metadata:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
         name: data
         labels:
           backup.homelab/strategy: native
