@@ -3,7 +3,7 @@ crds:
 prometheus:
   enabled: true
   servicemonitor:
-    enabled: true
+    enabled: false
 resources:
   requests:
     cpu: 50m
@@ -27,4 +27,3 @@ cainjector:
     limits:
       cpu: 250m
       memory: 384Mi
-
