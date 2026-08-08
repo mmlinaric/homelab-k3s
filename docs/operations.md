@@ -8,7 +8,7 @@ Renovate opens scheduled pull requests. Review release notes, backup status, com
 
 ## Daily checks
 
-Use Grafana and Telegram alerts for normal monitoring. Investigate any failed or stale Velero backup, CNPG backup or WAL warning, K3s snapshot warning, unhealthy Longhorn volume, certificate expiry, or unavailable public probe.
+Use Grafana and Telegram alerts for normal monitoring. Investigate any failed or stale Velero backup, K3s snapshot warning, unhealthy Longhorn volume, certificate expiry, or unavailable public probe.
 
 Useful commands:
 
@@ -16,8 +16,8 @@ Useful commands:
 kubectl -n argocd get applications
 kubectl get externalsecrets -A
 kubectl -n longhorn-system get volumes.longhorn.io
-kubectl -n velero get backup,backuprepository,dataupload
-kubectl -n keycloak get cluster,backup,scheduledbackup,objectstore
+kubectl -n velero get backups.velero.io,backuprepositories.velero.io,datauploads.velero.io
+kubectl -n keycloak get cluster
 kubectl get etcdsnapshotfile
 kubectl get certificate -A
 ```
@@ -25,25 +25,17 @@ kubectl get certificate -A
 ## Manual backup before risky work
 
 ```bash
-velero backup create "gitlab-manual-$(date +%Y%m%d-%H%M)" \
-  --from-schedule gitlab-daily \
-  --wait
-velero backup create "keycloak-logical-manual-$(date +%Y%m%d-%H%M)" \
-  --from-schedule keycloak-daily \
-  --wait
-kubectl -n keycloak create -f - <<'EOF'
-apiVersion: postgresql.cnpg.io/v1
-kind: Backup
-metadata:
-  generateName: keycloak-manual-
-  namespace: keycloak
-spec:
-  cluster:
-    name: keycloak-db
-  method: plugin
-  pluginConfiguration:
-    name: barman-cloud.cloudnative-pg.io
-EOF
+for schedule in gitlab-daily keycloak-daily; do
+  name="${schedule}-manual-$(date +%Y%m%d-%H%M)"
+  kubectl -n velero get schedule "$schedule" -o json |
+    jq --arg name "$name" '{
+      apiVersion: "velero.io/v1",
+      kind: "Backup",
+      metadata: {name: $name, namespace: "velero", labels: {"velero.io/schedule-name": .metadata.name}},
+      spec: .spec.template
+    }' |
+    kubectl apply -f -
+done
 sudo k3s etcd-snapshot save --name "manual-$(date +%Y%m%d-%H%M)" --s3
 ```
 

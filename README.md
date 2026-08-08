@@ -36,7 +36,7 @@ The first node is `192.168.70.10`. MetalLB assigns `192.168.70.100` to Traefik, 
 
 ## Start here
 
-1. Read [docs/secrets.md](docs/secrets.md) and replace every deployment `CHANGE_ME` value. Set the recovery target placeholder only when running a PITR drill.
+1. Read [docs/secrets.md](docs/secrets.md) and replace every deployment `CHANGE_ME` value.
 2. Follow [docs/bootstrap.md](docs/bootstrap.md) to prepare and bootstrap the new server.
 3. Confirm the new services using temporary local DNS overrides.
 4. Follow [docs/migration.md](docs/migration.md) for the cutover.
@@ -52,7 +52,7 @@ The design targets a 24-hour RPO and uses several independent layers:
 | --- | --- | --- |
 | K3s control plane | Encrypted etcd snapshots to OVH Object Storage | Every 12 hours |
 | GitLab application data | Native GitLab backup staged on a dedicated PVC, then Velero CSI data movement with Kopia to S3 | Daily, weekly, monthly |
-| Keycloak database | CNPG Barman WAL and base backups, plus a logical dump moved through Velero and Kopia | Continuous WAL, daily base backup, daily, weekly, and monthly logical backups |
+| Keycloak database | Validated logical dump moved through Velero and Kopia | Daily, weekly, and monthly logical backups |
 | Local recovery points | Longhorn snapshots with integrity checks | Daily snapshots, weekly cleanup and integrity check |
 
 Velero is intentionally not used for the live GitLab or Keycloak database volumes. Application-native backups provide the consistency boundary, and Velero moves the GitLab and Keycloak staging PVCs off site. See [docs/backups.md](docs/backups.md) for retention, verification, and recovery details.

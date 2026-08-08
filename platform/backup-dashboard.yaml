@@ -30,16 +30,8 @@ data:
         },
         {
           "type": "stat",
-          "title": "Keycloak seconds since base backup",
-          "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
-          "targets": [{"refId": "A", "expr": "time() - max(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace=\"keycloak\"})"}],
-          "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 108000}]}}, "overrides": []},
-          "options": {"colorMode": "background", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}}
-        },
-        {
-          "type": "stat",
           "title": "K3s seconds since S3 etcd snapshot",
-          "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+          "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
           "targets": [{"refId": "A", "expr": "time() - max(k3s_etcd_snapshot_created_timestamp{location=~\"s3://.*\"})"}],
           "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 50400}]}}, "overrides": []},
           "options": {"colorMode": "background", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}}

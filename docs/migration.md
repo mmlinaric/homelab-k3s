@@ -76,7 +76,7 @@ kubectl -n gitlab exec gitlab-0 -- gitlab-rake gitlab:doctor:secrets
 2. Remove any workstation hosts-file overrides.
 3. Test Keycloak admin only from the LAN. Confirm public `/admin` and `/realms/master` routes return 404.
 4. Test GitLab OIDC, HTTPS Git operations, and registry operations.
-5. Create manual Velero backups from `gitlab-daily` and `keycloak-daily`, plus a manual CNPG backup. Confirm all three complete and objects appear in OVH Object Storage.
+5. Create manual Velero backups from `gitlab-daily` and `keycloak-daily`. Confirm both complete and objects appear in OVH Object Storage.
 6. Confirm Telegram receives a test alert.
 7. Keep the old host powered off but recoverable for at least one week. Decommission unused Compose applications only after that hold period.
 

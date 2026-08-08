@@ -2,6 +2,8 @@
 
 Test restores quarterly and after any backup tooling change. Never test a destructive restore against a production namespace.
 
+The GitLab and Keycloak drills use the optional Velero CLI on the operator workstation. It is not installed on the K3s server by the bootstrap playbook.
+
 ## GitLab staging restore drill
 
 Choose a completed backup, then restore only PVC resources into an isolated namespace. The live GitLab PVCs were excluded from the backup, so this restores the `gitlab-backups` staging PVC and its moved data.
@@ -72,44 +74,6 @@ kubectl -n keycloak-logical-restore exec backup-inspector -- sh -ec 'cd /backups
 ```
 
 For a full logical drill, create an empty isolated PostgreSQL 18 cluster with database and owner `keycloak`, then import with `pg_restore --exit-on-error --no-owner --no-acl`. Start a temporary Keycloak instance against it and verify realms, clients, users, and sign-in.
-
-## Keycloak PITR restore drill
-
-The repository includes `recovery/keycloak` for latest-state recovery and `recovery/keycloak/point-in-time` for PITR. Neither overlay enables WAL archiving on the drill cluster, so it cannot write into the production server prefix.
-
-For latest-state recovery:
-
-```bash
-kubectl apply -k recovery/keycloak
-```
-
-For PITR, replace `CHANGE_ME_RECOVERY_TARGET_RFC3339` with a UTC RFC3339 timestamp inside the current recovery window, then run:
-
-```bash
-kubectl apply -k recovery/keycloak/point-in-time
-```
-
-Bootstrap a new CNPG cluster from the plugin source:
-
-```yaml
-spec:
-  bootstrap:
-    recovery:
-      source: keycloak-production
-      recoveryTarget:
-        targetTime: "2026-08-08 12:00:00+00"
-  externalClusters:
-    - name: keycloak-production
-      plugin:
-        name: barman-cloud.cloudnative-pg.io
-        parameters:
-          barmanObjectName: keycloak-backups
-          serverName: keycloak-db
-```
-
-The base overlay omits `recoveryTarget` and restores the latest recoverable point. The point-in-time overlay adds it. Wait for `keycloak-db-recovery` to become healthy before inspecting data.
-
-Connect with `psql`, count realms, clients, and users, then start a temporary Keycloak instance against the recovered database. Record the chosen target time and the last archived WAL applied.
 
 ## K3s control-plane restore
 

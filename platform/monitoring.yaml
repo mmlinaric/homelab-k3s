@@ -138,28 +138,6 @@ spec:
           labels: {severity: warning}
           annotations:
             summary: "Velero backup schedule {{ $labels.schedule }} partially failed"
-        - alert: KeycloakBackupStale
-          expr: >-
-            (time() - max(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace="keycloak"}) > 30 * 3600)
-            or absent(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace="keycloak"})
-          for: 1h
-          labels: {severity: critical}
-          annotations:
-            summary: Keycloak has no successful base backup in the last 30 hours
-        - alert: KeycloakBackupFailed
-          expr: >-
-            max(barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp{namespace="keycloak"})
-            > max(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace="keycloak"})
-          for: 15m
-          labels: {severity: critical}
-          annotations:
-            summary: The most recent Keycloak base backup attempt failed
-        - alert: KeycloakWalArchiveBacklog
-          expr: max(cnpg_collector_pg_wal_archive_status{namespace="keycloak",value="ready"}) > 5
-          for: 15m
-          labels: {severity: critical}
-          annotations:
-            summary: Keycloak WAL archiving has a sustained backlog
         - alert: K3sEtcdSnapshotStale
           expr: (max(k3s_etcd_snapshot_created_timestamp{location=~"s3://.*"}) < time() - 14 * 3600) or absent(k3s_etcd_snapshot_created_timestamp{location=~"s3://.*"})
           for: 30m

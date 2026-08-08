@@ -4,7 +4,7 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $renderDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "homelab-k3s-rendered"
 New-Item -ItemType Directory -Path $renderDirectory -Force | Out-Null
 
-$targets = @("platform", "apps", "clusters/homelab", "recovery/keycloak", "recovery/keycloak/point-in-time")
+$targets = @("platform", "apps", "clusters/homelab")
 foreach ($target in $targets) {
     $outputName = $target.Replace("/", "-") + ".yaml"
     kubectl kustomize (Join-Path $repositoryRoot $target) | Set-Content (Join-Path $renderDirectory $outputName)

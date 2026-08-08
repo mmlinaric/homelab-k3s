@@ -43,10 +43,6 @@ helm template argocd argo/argo-cd \
   --namespace argocd \
   --values ansible/files/argocd-values.yaml > /dev/null
 
-helm template barman cnpg/plugin-barman-cloud \
-  --version 0.7.1 \
-  --namespace cnpg-system > /dev/null
-
 helm template external-secrets external-secrets/external-secrets \
   --version 2.9.0 \
   --namespace external-secrets \
