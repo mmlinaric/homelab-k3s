@@ -28,7 +28,7 @@ spec:
     poolMinSize: 1
     poolMaxSize: 10
   hostname:
-    hostname: auth.mmlinaric.com
+    hostname: https://auth.mmlinaric.com
     strict: true
     backchannelDynamic: true
   http:
