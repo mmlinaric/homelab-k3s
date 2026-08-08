@@ -1,0 +1,22 @@
+token: "{{ k3s_server_token }}"
+node-name: "{{ inventory_hostname }}"
+node-ip: "{{ node_ip }}"
+advertise-address: "{{ node_ip }}"
+tls-san:
+  - "{{ k3s_api_vip }}"
+  - "{{ node_ip }}"
+cluster-init: true
+secrets-encryption: true
+write-kubeconfig-mode: "0640"
+cluster-cidr: "{{ k3s_cluster_cidr }}"
+service-cidr: "{{ k3s_service_cidr }}"
+flannel-iface: "{{ k3s_interface }}"
+disable:
+  - traefik
+  - servicelb
+etcd-snapshot-schedule-cron: "0 */12 * * *"
+etcd-snapshot-retention: 14
+etcd-snapshot-compress: true
+etcd-s3: true
+etcd-s3-config-secret: k3s-etcd-snapshot-s3-config
+

@@ -1,0 +1,94 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: gitlab-backup
+  namespace: gitlab
+spec:
+  schedule: "0 2 * * *"
+  timeZone: Europe/Warsaw
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          serviceAccountName: gitlab-backup
+          restartPolicy: Never
+          initContainers:
+            - name: create-native-backups
+              image: registry.k8s.io/kubectl:v1.36.3
+              command: [sh, -ec]
+              args:
+                - |
+                  pod="$(kubectl get pods -n gitlab -l app.kubernetes.io/name=gitlab -o jsonpath='{.items[0].metadata.name}')"
+                  kubectl exec -n gitlab "$pod" -- gitlab-backup create CRON=1
+                  kubectl exec -n gitlab "$pod" -- gitlab-ctl backup-etc --backup-path /var/opt/gitlab/backups/config
+          containers:
+            - name: restic
+              image: restic/restic:0.18.1
+              command: [sh, -ec]
+              args:
+                - |
+                  restic backup --tag gitlab /gitlab/backups
+                  restic forget --prune --group-by tags --keep-daily 7 --keep-weekly 4 --keep-monthly 6
+              envFrom:
+                - secretRef: {name: gitlab-restic}
+              volumeMounts:
+                - {name: gitlab-data, mountPath: /gitlab, readOnly: true}
+          volumes:
+            - name: gitlab-data
+              persistentVolumeClaim:
+                claimName: data-gitlab-0
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: gitlab-backup-check
+  namespace: gitlab
+spec:
+  schedule: "0 4 * * 6"
+  timeZone: Europe/Warsaw
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: restic-check
+              image: restic/restic:0.18.1
+              args: [check, --read-data-subset=10%]
+              envFrom:
+                - secretRef: {name: gitlab-restic}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gitlab-presync-backup
+  namespace: gitlab
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      serviceAccountName: gitlab-backup
+      restartPolicy: Never
+      containers:
+        - name: backup
+          image: registry.k8s.io/kubectl:v1.36.3
+          command: [sh, -ec]
+          args:
+            - |
+              pod="$(kubectl get pods -n gitlab -l app.kubernetes.io/name=gitlab -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+              if [ -z "$pod" ]; then
+                exit 0
+              fi
+              kubectl exec -n gitlab "$pod" -- gitlab-backup create CRON=1
+

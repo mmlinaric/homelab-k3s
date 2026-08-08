@@ -1,0 +1,58 @@
+global:
+  domain: argocd.mmlinaric.com
+configs:
+  params:
+    server.insecure: true
+  cm:
+    admin.enabled: true
+    url: https://argocd.mmlinaric.com
+    oidc.config: |
+      name: Keycloak
+      issuer: https://auth.mmlinaric.com/realms/homelab
+      clientID: argocd
+      clientSecret: $argocd-oidc:clientSecret
+      requestedScopes:
+        - openid
+        - profile
+        - email
+        - groups
+  rbac:
+    policy.default: role:readonly
+    policy.csv: |
+      g, homelab-admins, role:admin
+server:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+controller:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 150m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+repoServer:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      cpu: 1
+      memory: 768Mi
+applicationSet:
+  replicas: 1
+notifications:
+  enabled: false
+dex:
+  enabled: false
+redis-ha:
+  enabled: false
+

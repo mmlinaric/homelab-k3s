@@ -1,0 +1,261 @@
+---
+- name: Bootstrap the homelab K3s server
+  hosts: k3s_servers
+  become: true
+  vars:
+    k3s_server_token: "{{ lookup('env', 'K3S_SERVER_TOKEN') }}"
+    bws_access_token: "{{ lookup('env', 'BWS_ACCESS_TOKEN') }}"
+    github_username: "{{ lookup('env', 'GITHUB_REPO_USERNAME') }}"
+    github_token: "{{ lookup('env', 'GITHUB_REPO_TOKEN') }}"
+  pre_tasks:
+    - name: Validate required controller environment variables
+      ansible.builtin.assert:
+        that:
+          - k3s_server_token | length > 20
+          - bws_access_token | length > 20
+          - github_username | length > 0
+          - github_token | length > 20
+          - bitwarden_organization_id != 'CHANGE_ME_BITWARDEN_ORGANIZATION_ID'
+          - bitwarden_project_id != 'CHANGE_ME_BITWARDEN_PROJECT_ID'
+        fail_msg: Set the bootstrap environment variables and Bitwarden IDs before running this playbook.
+      no_log: true
+
+  tasks:
+    - name: Install host prerequisites
+      ansible.builtin.apt:
+        name:
+          - apparmor
+          - ca-certificates
+          - curl
+          - jq
+          - nfs-common
+          - open-iscsi
+          - python3-kubernetes
+        state: present
+        update_cache: true
+
+    - name: Enable iscsid
+      ansible.builtin.systemd_service:
+        name: iscsid
+        enabled: true
+        state: started
+
+    - name: Set the host timezone
+      community.general.timezone:
+        name: "{{ cluster_timezone }}"
+
+    - name: Disable swap immediately
+      ansible.builtin.command: swapoff -a
+      changed_when: false
+
+    - name: Disable configured swap entries
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(\s*[^#]\S+\s+\S+\s+swap\s+.*)$'
+        replace: '# \1'
+
+    - name: Create K3s configuration directory
+      ansible.builtin.file:
+        path: /etc/rancher/k3s
+        state: directory
+        owner: root
+        group: root
+        mode: '0750'
+
+    - name: Write K3s configuration
+      ansible.builtin.template:
+        src: ../templates/k3s-config.yaml.j2
+        dest: /etc/rancher/k3s/config.yaml
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+      notify: Restart K3s
+
+    - name: Read the installed K3s version
+      ansible.builtin.command: k3s --version
+      register: installed_k3s
+      changed_when: false
+      failed_when: false
+
+    - name: Download the K3s installer
+      ansible.builtin.get_url:
+        url: https://get.k3s.io
+        dest: /usr/local/src/install-k3s.sh
+        owner: root
+        group: root
+        mode: '0755'
+      when: k3s_version not in installed_k3s.stdout
+
+    - name: Install the pinned K3s version
+      ansible.builtin.command: /usr/local/src/install-k3s.sh
+      environment:
+        INSTALL_K3S_VERSION: "{{ k3s_version }}"
+        INSTALL_K3S_EXEC: server
+      when: k3s_version not in installed_k3s.stdout
+      notify: Restart K3s
+
+    - name: Flush K3s restart handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Wait for the local Kubernetes API
+      ansible.builtin.command: k3s kubectl get nodes
+      register: api_ready
+      retries: 30
+      delay: 10
+      until: api_ready.rc == 0
+      changed_when: false
+
+    - name: Render kube-vip resources
+      ansible.builtin.template:
+        src: ../templates/kube-vip.yaml.j2
+        dest: /var/lib/rancher/k3s/server/manifests/kube-vip.yaml
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Wait for the API virtual IP
+      ansible.builtin.uri:
+        url: "https://{{ k3s_api_vip }}:{{ k3s_api_port }}/readyz"
+        validate_certs: false
+        status_code: 200
+      register: vip_ready
+      retries: 30
+      delay: 5
+      until: vip_ready.status == 200
+
+    - name: Install Helm
+      ansible.builtin.unarchive:
+        src: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
+        dest: /usr/local/src
+        remote_src: true
+        creates: "/usr/local/src/linux-amd64/helm"
+
+    - name: Copy Helm binary into PATH
+      ansible.builtin.copy:
+        src: /usr/local/src/linux-amd64/helm
+        dest: /usr/local/bin/helm
+        owner: root
+        group: root
+        mode: '0755'
+        remote_src: true
+
+    - name: Add bootstrap Helm repositories
+      ansible.builtin.command: >-
+        helm repo add {{ item.name }} {{ item.url }} --force-update
+      loop:
+        - name: argo
+          url: https://argoproj.github.io/argo-helm
+        - name: jetstack
+          url: https://charts.jetstack.io
+        - name: external-secrets
+          url: https://charts.external-secrets.io
+      changed_when: true
+
+    - name: Update bootstrap Helm repositories
+      ansible.builtin.command: helm repo update
+      changed_when: true
+
+    - name: Copy bootstrap chart values
+      ansible.builtin.copy:
+        src: "../files/{{ item }}"
+        dest: "/var/lib/rancher/k3s/server/{{ item }}"
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - argocd-values.yaml
+        - cert-manager-values.yaml
+        - external-secrets-values.yaml
+
+    - name: Install cert-manager
+      ansible.builtin.command: >-
+        helm upgrade --install cert-manager jetstack/cert-manager
+        --namespace cert-manager --create-namespace
+        --version {{ cert_manager_chart_version }}
+        --values /var/lib/rancher/k3s/server/cert-manager-values.yaml
+        --kubeconfig /etc/rancher/k3s/k3s.yaml
+        --wait --timeout 10m
+      changed_when: true
+
+    - name: Install External Secrets Operator
+      ansible.builtin.command: >-
+        helm upgrade --install external-secrets external-secrets/external-secrets
+        --namespace external-secrets --create-namespace
+        --version {{ external_secrets_chart_version }}
+        --values /var/lib/rancher/k3s/server/external-secrets-values.yaml
+        --kubeconfig /etc/rancher/k3s/k3s.yaml
+        --wait --timeout 10m
+      changed_when: true
+
+    - name: Install Argo CD
+      ansible.builtin.command: >-
+        helm upgrade --install argocd argo/argo-cd
+        --namespace argocd --create-namespace
+        --version {{ argocd_chart_version }}
+        --values /var/lib/rancher/k3s/server/argocd-values.yaml
+        --kubeconfig /etc/rancher/k3s/k3s.yaml
+        --wait --timeout 10m
+      changed_when: true
+
+    - name: Create the Bitwarden bootstrap token secret
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: bitwarden-access-token
+            namespace: external-secrets
+          type: Opaque
+          stringData:
+            token: "{{ bws_access_token }}"
+      no_log: true
+
+    - name: Create the private Git repository credential
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: homelab-k3s-repository
+            namespace: argocd
+            labels:
+              argocd.argoproj.io/secret-type: repository
+          type: Opaque
+          stringData:
+            type: git
+            url: "{{ gitops_repo_url }}"
+            username: "{{ github_username }}"
+            password: "{{ github_token }}"
+      no_log: true
+
+    - name: Apply the root Argo CD application
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: present
+        src: "{{ playbook_dir }}/../../bootstrap/root-application.yaml"
+
+    - name: Copy kubeconfig for the operator
+      ansible.builtin.fetch:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: "{{ playbook_dir }}/../../kubeconfig"
+        flat: true
+
+    - name: Point the operator kubeconfig at the API virtual IP
+      ansible.builtin.replace:
+        path: "{{ playbook_dir }}/../../kubeconfig"
+        regexp: 'server: https://127\.0\.0\.1:6443'
+        replace: "server: https://{{ k3s_api_vip }}:{{ k3s_api_port }}"
+      delegate_to: localhost
+      become: false
+
+  handlers:
+    - name: Restart K3s
+      ansible.builtin.systemd_service:
+        name: k3s
+        enabled: true
+        state: restarted

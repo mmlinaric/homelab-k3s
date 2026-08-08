@@ -1,0 +1,172 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gitlab
+  namespace: gitlab
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
+spec:
+  serviceName: gitlab
+  replicas: 1
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gitlab
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gitlab
+    spec:
+      terminationGracePeriodSeconds: 180
+      initContainers:
+        - name: restore-secrets
+          image: busybox:1.37.0
+          command:
+            - sh
+            - -ec
+            - |
+              if [ ! -s /gitlab-config/gitlab-secrets.json ]; then
+                cp /source/gitlab-secrets.json /gitlab-config/gitlab-secrets.json
+                chmod 0600 /gitlab-config/gitlab-secrets.json
+              fi
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - {name: config, mountPath: /gitlab-config}
+            - {name: secrets-json, mountPath: /source, readOnly: true}
+      containers:
+        - name: gitlab
+          image: gitlab/gitlab-ce:19.2.1-ce.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GITLAB_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-runtime
+                  key: oidc-client-secret
+            - name: GITLAB_OMNIBUS_CONFIG
+              value: |
+                external_url 'https://gitlab.mmlinaric.com'
+                letsencrypt['enable'] = false
+                nginx['listen_port'] = 8080
+                nginx['listen_https'] = false
+                nginx['proxy_set_headers'] = {
+                  'Host' => '$http_host_with_default',
+                  'X-Real-IP' => '$remote_addr',
+                  'X-Forwarded-For' => '$proxy_add_x_forwarded_for',
+                  'X-Forwarded-Proto' => 'https',
+                  'X-Forwarded-Ssl' => 'on'
+                }
+                registry_external_url 'https://registry.mmlinaric.com'
+                registry_nginx['listen_port'] = 5000
+                registry_nginx['listen_https'] = false
+                gitlab_rails['registry_enabled'] = true
+                gitlab_rails['registry_host'] = 'registry.mmlinaric.com'
+                gitlab_rails['registry_port'] = '443'
+                registry['database'] = {
+                  'enabled' => true,
+                  'host' => '/var/opt/gitlab/postgresql',
+                  'port' => 5432,
+                  'user' => 'registry',
+                  'dbname' => 'registry',
+                  'sslmode' => 'prefer'
+                }
+                gitlab_rails['omniauth_enabled'] = true
+                gitlab_rails['omniauth_allow_single_sign_on'] = ['openid_connect']
+                gitlab_rails['omniauth_block_auto_created_users'] = true
+                gitlab_rails['omniauth_auto_link_user'] = ['openid_connect']
+                gitlab_rails['omniauth_providers'] = [
+                  {
+                    name: 'openid_connect',
+                    label: 'Keycloak',
+                    args: {
+                      name: 'openid_connect',
+                      scope: ['openid', 'profile', 'email'],
+                      response_type: 'code',
+                      issuer: 'https://auth.mmlinaric.com/realms/homelab',
+                      client_auth_method: 'query',
+                      discovery: true,
+                      uid_field: 'email',
+                      pkce: true,
+                      client_options: {
+                        identifier: 'gitlab',
+                        secret: ENV['GITLAB_OIDC_CLIENT_SECRET'],
+                        redirect_uri: 'https://gitlab.mmlinaric.com/users/auth/openid_connect/callback'
+                      }
+                    }
+                  }
+                ]
+                prometheus_monitoring['enable'] = false
+                grafana['enable'] = false
+                gitlab_pages['enable'] = false
+                gitlab_kas['enable'] = false
+                puma['worker_processes'] = 2
+                sidekiq['concurrency'] = 10
+                postgresql['shared_buffers'] = '256MB'
+                gitlab_rails['backup_keep_time'] = 172800
+          ports:
+            - {name: web, containerPort: 8080}
+            - {name: registry, containerPort: 5000}
+          startupProbe:
+            httpGet: {path: /-/readiness, port: web}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet: {path: /-/readiness, port: web}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: {path: /-/liveness, port: web}
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests: {cpu: 2, memory: 8Gi}
+            limits: {cpu: 8, memory: 12Gi}
+          volumeMounts:
+            - {name: config, mountPath: /etc/gitlab}
+            - {name: logs, mountPath: /var/log/gitlab}
+            - {name: data, mountPath: /var/opt/gitlab}
+            - {name: shm, mountPath: /dev/shm}
+      volumes:
+        - name: secrets-json
+          secret:
+            secretName: gitlab-secrets-json
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: config
+        annotations:
+          argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: longhorn
+        resources:
+          requests: {storage: 10Gi}
+    - metadata:
+        name: logs
+        annotations:
+          argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: longhorn
+        resources:
+          requests: {storage: 20Gi}
+    - metadata:
+        name: data
+        annotations:
+          argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
+          recurring-job.longhorn.io/source: enabled
+          recurring-job-group.longhorn.io/default: enabled
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: longhorn
+        resources:
+          requests: {storage: 200Gi}

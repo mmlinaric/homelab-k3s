@@ -1,0 +1,51 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.36.3
+      - uses: azure/setup-helm@v4
+        with:
+          version: v4.2.3
+      - name: Install validators
+        run: |
+          python -m pip install ansible-core==2.19.2 ansible-lint==25.8.2 yamllint==1.37.1
+          curl --fail --silent --show-error --location \
+            https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz \
+            | sudo tar -xz -C /usr/local/bin kubeconform
+          sudo curl --fail --silent --show-error --location \
+            https://github.com/mikefarah/yq/releases/download/v4.47.2/yq_linux_amd64 \
+            --output /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+          ansible-galaxy collection install -r ansible/collections/requirements.yml
+      - name: Render manifests
+        run: |
+          mkdir rendered
+          kubectl kustomize platform > rendered/platform.yaml
+          kubectl kustomize apps > rendered/apps.yaml
+          kubectl kustomize clusters/homelab > rendered/cluster.yaml
+      - name: Validate schemas
+        run: kubeconform -kubernetes-version 1.36.0 -strict -summary -ignore-missing-schemas rendered
+      - name: Render pinned Helm charts
+        run: bash scripts/validate-helm.sh
+      - name: Lint YAML and Ansible
+        run: |
+          yamllint -c .yamllint.yaml .
+          ansible-lint ansible/playbooks/bootstrap.yml
+      - name: Reject em dashes
+        run: '! grep -R -n --exclude-dir=.git "$(printf "\\342\\200\\224")" .'

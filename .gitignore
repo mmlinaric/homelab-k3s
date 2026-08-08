@@ -1,0 +1,8 @@
+.idea/
+.vscode/
+*.retry
+*.tmp
+*.swp
+.env
+kubeconfig
+age-key.txt

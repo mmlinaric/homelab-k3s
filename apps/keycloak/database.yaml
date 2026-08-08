@@ -1,0 +1,80 @@
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: keycloak-backups
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
+spec:
+  retentionPolicy: 30d
+  configuration:
+    destinationPath: s3://CHANGE_ME_KEYCLOAK_BACKUP_BUCKET/keycloak
+    endpointURL: CHANGE_ME_CONTABO_S3_ENDPOINT
+    s3Credentials:
+      accessKeyId:
+        name: keycloak-barman-s3
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: keycloak-barman-s3
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: keycloak-db
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.1-standard-trixie
+  primaryUpdateStrategy: unsupervised
+  enableSuperuserAccess: true
+  superuserSecret:
+    name: keycloak-superuser
+  bootstrap:
+    initdb:
+      database: keycloak
+      owner: keycloak
+      secret:
+        name: keycloak-database
+      encoding: UTF8
+      localeCType: C.UTF-8
+      localeCollate: C.UTF-8
+  storage:
+    storageClass: longhorn
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 2
+      memory: 1Gi
+  monitoring:
+    enablePodMonitor: true
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: keycloak-backups
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: keycloak-daily
+  namespace: keycloak
+spec:
+  schedule: "0 0 1 * * *"
+  backupOwnerReference: self
+  immediate: true
+  cluster:
+    name: keycloak-db
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+

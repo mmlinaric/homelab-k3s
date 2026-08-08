@@ -1,0 +1,47 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "dependencyDashboard": true,
+  "automerge": false,
+  "schedule": ["before 5am on Saturday"],
+  "timezone": "Europe/Warsaw",
+  "argocd": {
+    "managerFilePatterns": ["/clusters/.+\\.yaml$/"]
+  },
+  "kubernetes": {
+    "managerFilePatterns": ["/(apps|platform)/.+\\.yaml$/"]
+  },
+  "packageRules": [
+    {
+      "matchManagers": ["argocd", "kubernetes"],
+      "groupName": "cluster dependencies"
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/ansible/group_vars/all\\.yml$/"],
+      "matchStrings": ["k3s_version: (?<currentValue>[^\\s]+)"],
+      "depNameTemplate": "k3s-io/k3s",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/ansible/group_vars/all\\.yml$/"],
+      "matchStrings": ["helm_version: (?<currentValue>[^\\s]+)"],
+      "depNameTemplate": "helm/helm",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/ansible/group_vars/all\\.yml$/"],
+      "matchStrings": ["kube_vip_version: (?<currentValue>[^\\s]+)"],
+      "depNameTemplate": "kube-vip/kube-vip",
+      "datasourceTemplate": "github-releases"
+    }
+  ]
+}

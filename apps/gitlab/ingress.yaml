@@ -1,0 +1,74 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: gitlab
+  namespace: gitlab
+spec:
+  secretName: gitlab-tls
+  dnsNames:
+    - gitlab.mmlinaric.com
+    - registry.mmlinaric.com
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: gitlab-lan
+  namespace: gitlab
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: Host(`gitlab.mmlinaric.com`)
+      kind: Rule
+      services:
+        - {name: gitlab-web, port: 8080}
+  tls:
+    secretName: gitlab-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: gitlab-public
+  namespace: gitlab
+spec:
+  entryPoints: [tunnel]
+  routes:
+    - match: Host(`gitlab.mmlinaric.com`) && !PathPrefix(`/admin`) && !PathPrefix(`/api/v4/admin`)
+      kind: Rule
+      services:
+        - {name: gitlab-web, port: 8080}
+  tls:
+    secretName: gitlab-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: registry-lan
+  namespace: gitlab
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: Host(`registry.mmlinaric.com`)
+      kind: Rule
+      services:
+        - {name: gitlab-registry, port: 5000}
+  tls:
+    secretName: gitlab-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: registry-public
+  namespace: gitlab
+spec:
+  entryPoints: [tunnel]
+  routes:
+    - match: Host(`registry.mmlinaric.com`)
+      kind: Rule
+      services:
+        - {name: gitlab-registry, port: 5000}
+  tls:
+    secretName: gitlab-tls
+

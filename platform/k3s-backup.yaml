@@ -1,0 +1,38 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: k3s-etcd-snapshot-s3-config
+  namespace: kube-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: bitwarden
+    kind: ClusterSecretStore
+  target:
+    name: k3s-etcd-snapshot-s3-config
+    creationPolicy: Owner
+    template:
+      type: etcd.k3s.cattle.io/s3-config-secret
+      data:
+        etcd-s3-endpoint: "{{ .endpoint }}"
+        etcd-s3-access-key: "{{ .accessKey }}"
+        etcd-s3-secret-key: "{{ .secretKey }}"
+        etcd-s3-bucket: "{{ .bucket }}"
+        etcd-s3-folder: homelab/etcd
+        etcd-s3-region: "{{ .region }}"
+  data:
+    - secretKey: endpoint
+      remoteRef:
+        key: CHANGE_ME_BWS_CONTABO_S3_ENDPOINT_ID
+    - secretKey: accessKey
+      remoteRef:
+        key: CHANGE_ME_BWS_ETCD_S3_ACCESS_KEY_ID
+    - secretKey: secretKey
+      remoteRef:
+        key: CHANGE_ME_BWS_ETCD_S3_SECRET_ACCESS_KEY_ID
+    - secretKey: bucket
+      remoteRef:
+        key: CHANGE_ME_BWS_ETCD_S3_BUCKET_ID
+    - secretKey: region
+      remoteRef:
+        key: CHANGE_ME_BWS_CONTABO_S3_REGION_ID

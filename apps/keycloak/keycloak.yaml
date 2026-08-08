@@ -1,0 +1,54 @@
+apiVersion: k8s.keycloak.org/v2beta1
+kind: Keycloak
+metadata:
+  name: keycloak
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
+spec:
+  instances: 1
+  image: quay.io/keycloak/keycloak:26.7.1
+  bootstrapAdmin:
+    user:
+      secret: keycloak-bootstrap-admin
+  db:
+    vendor: postgres
+    host: keycloak-db-rw
+    port: 5432
+    database: keycloak
+    schema: public
+    usernameSecret:
+      name: keycloak-database
+      key: username
+    passwordSecret:
+      name: keycloak-database
+      key: password
+    poolInitialSize: 1
+    poolMinSize: 1
+    poolMaxSize: 10
+  hostname:
+    hostname: auth.mmlinaric.com
+    strict: true
+    backchannelDynamic: true
+  http:
+    httpEnabled: true
+    httpPort: 8080
+  proxy:
+    headers: xforwarded
+  ingress:
+    enabled: false
+  networkPolicy:
+    enabled: false
+  additionalOptions:
+    - name: health-enabled
+      value: "true"
+    - name: metrics-enabled
+      value: "true"
+  resources:
+    requests:
+      cpu: 250m
+      memory: 768Mi
+    limits:
+      cpu: 2
+      memory: 2Gi
+

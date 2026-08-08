@@ -1,0 +1,128 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: grafana-admin
+  namespace: monitoring
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: bitwarden
+    kind: ClusterSecretStore
+  target:
+    name: grafana-admin
+    creationPolicy: Owner
+  data:
+    - secretKey: admin-user
+      remoteRef:
+        key: CHANGE_ME_BWS_GRAFANA_ADMIN_USER_ID
+    - secretKey: admin-password
+      remoteRef:
+        key: CHANGE_ME_BWS_GRAFANA_ADMIN_PASSWORD_ID
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: grafana-oidc
+  namespace: monitoring
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: bitwarden
+    kind: ClusterSecretStore
+  target:
+    name: grafana-oidc
+    creationPolicy: Owner
+    template:
+      data:
+        GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET: "{{ .clientSecret }}"
+  data:
+    - secretKey: clientSecret
+      remoteRef:
+        key: CHANGE_ME_BWS_GRAFANA_OIDC_CLIENT_SECRET_ID
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: alertmanager-telegram
+  namespace: monitoring
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: bitwarden
+    kind: ClusterSecretStore
+  target:
+    name: alertmanager-telegram
+    creationPolicy: Owner
+  data:
+    - secretKey: bot-token
+      remoteRef:
+        key: CHANGE_ME_BWS_TELEGRAM_BOT_TOKEN_ID
+    - secretKey: chat-id
+      remoteRef:
+        key: CHANGE_ME_BWS_TELEGRAM_CHAT_ID
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  secretName: grafana-tls
+  dnsNames: [grafana.mmlinaric.com]
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: Host(`grafana.mmlinaric.com`)
+      kind: Rule
+      services:
+        - name: kube-prometheus-stack-grafana
+          port: 80
+  tls:
+    secretName: grafana-tls
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: homelab
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: homelab.endpoints
+      rules:
+        - alert: PublicEndpointUnavailable
+          expr: probe_success == 0
+          for: 5m
+          labels: {severity: critical}
+          annotations:
+            summary: "Endpoint {{ $labels.instance }} is unavailable"
+        - alert: CertificateExpiresSoon
+          expr: probe_ssl_earliest_cert_expiry - time() < 21 * 24 * 3600
+          for: 15m
+          labels: {severity: warning}
+          annotations:
+            summary: "Certificate for {{ $labels.instance }} expires within 21 days"
+    - name: homelab.backups
+      rules:
+        - alert: BackupCronJobFailed
+          expr: kube_job_status_failed{namespace=~"gitlab|keycloak"} > 0
+          for: 5m
+          labels: {severity: critical}
+          annotations:
+            summary: "Backup job {{ $labels.job_name }} failed"
+        - alert: BackupCronJobMissing
+          expr: time() - kube_cronjob_status_last_successful_time{namespace="gitlab",cronjob="gitlab-backup"} > 30 * 3600
+          for: 15m
+          labels: {severity: critical}
+          annotations:
+            summary: GitLab has no successful backup in the last 30 hours

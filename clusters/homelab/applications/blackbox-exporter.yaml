@@ -1,0 +1,48 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: blackbox-exporter
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: prometheus-blackbox-exporter
+    targetRevision: 11.16.0
+    helm:
+      valuesObject:
+        serviceMonitor:
+          enabled: true
+          targets:
+            - name: keycloak
+              url: https://auth.mmlinaric.com/realms/homelab
+            - name: gitlab
+              url: https://gitlab.mmlinaric.com/-/readiness
+            - name: registry
+              url: https://registry.mmlinaric.com/v2/
+              module: http_2xx_or_3xx_or_401
+        config:
+          modules:
+            http_2xx:
+              prober: http
+              timeout: 10s
+              http:
+                preferred_ip_protocol: ip4
+            http_2xx_or_3xx_or_401:
+              prober: http
+              timeout: 10s
+              http:
+                preferred_ip_protocol: ip4
+                valid_status_codes: [200, 204, 301, 302, 401]
+        resources:
+          requests: {cpu: 20m, memory: 32Mi}
+          limits: {cpu: 200m, memory: 128Mi}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: {enabled: true, prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+

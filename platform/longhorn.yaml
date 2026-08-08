@@ -1,0 +1,65 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: longhorn-backup-credentials
+  namespace: longhorn-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: bitwarden
+    kind: ClusterSecretStore
+  target:
+    name: longhorn-backup-credentials
+    creationPolicy: Owner
+  data:
+    - secretKey: AWS_ACCESS_KEY_ID
+      remoteRef:
+        key: CHANGE_ME_BWS_LONGHORN_S3_ACCESS_KEY_ID
+    - secretKey: AWS_SECRET_ACCESS_KEY
+      remoteRef:
+        key: CHANGE_ME_BWS_LONGHORN_S3_SECRET_ACCESS_KEY_ID
+    - secretKey: AWS_ENDPOINTS
+      remoteRef:
+        key: CHANGE_ME_BWS_CONTABO_S3_ENDPOINT_ID
+---
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: daily-backup
+  namespace: longhorn-system
+spec:
+  cron: "30 3 * * *"
+  task: backup
+  groups: [default]
+  retain: 7
+  concurrency: 1
+  parameters:
+    full-backup-interval: "30"
+---
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: weekly-backup
+  namespace: longhorn-system
+spec:
+  cron: "30 4 * * 0"
+  task: backup
+  groups: [default]
+  retain: 4
+  concurrency: 1
+  labels:
+    schedule: weekly
+---
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: monthly-backup
+  namespace: longhorn-system
+spec:
+  cron: "30 5 1 * *"
+  task: backup
+  groups: [default]
+  retain: 6
+  concurrency: 1
+  labels:
+    schedule: monthly

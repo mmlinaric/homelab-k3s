@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespaces.yaml
+  - metallb.yaml
+  - traefik-tunnel-service.yaml
+  - external-secrets.yaml
+  - k3s-backup.yaml
+  - certificates.yaml
+  - longhorn.yaml
+  - argocd.yaml
+  - monitoring.yaml
