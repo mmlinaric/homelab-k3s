@@ -81,7 +81,7 @@ openssl rand -base64 48
 
 Store it in Bitwarden and in the encrypted offline recovery kit. Never rotate it for an existing repository.
 
-Generate the Longhorn OAuth2 Proxy cookie secret once and store its Base64 output in Bitwarden:
+Generate the Longhorn OAuth2 Proxy cookie secret once and store its Base64 output in Bitwarden. The Longhorn `ExternalSecret` decodes it to the 32 raw bytes required by OAuth2 Proxy:
 
 ```bash
 openssl rand -base64 32

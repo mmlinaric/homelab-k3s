@@ -35,11 +35,16 @@ spec:
   target:
     name: longhorn-oauth2-proxy
     creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        client-secret: "{{ .clientSecret }}"
+        cookie-secret: "{{ .cookieSecret | b64dec }}"
   data:
-    - secretKey: client-secret
+    - secretKey: clientSecret
       remoteRef:
         key: 581c8611-946d-4941-805a-b4a100d27e87
-    - secretKey: cookie-secret
+    - secretKey: cookieSecret
       remoteRef:
         key: ba8d842a-05b0-433c-ac9f-b4a100d323a8
 ---

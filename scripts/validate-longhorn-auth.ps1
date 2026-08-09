@@ -69,4 +69,7 @@ Assert-Match -Document $deployment -Pattern '(?m)^\s+- --trusted-proxy-ip=10\.42
 $networkPolicy = Get-ResourceDocument -Kind "NetworkPolicy" -Name "longhorn-oauth2-proxy"
 Assert-Match -Document $networkPolicy -Pattern '(?ms)namespaceSelector:\s+matchLabels:\s+kubernetes\.io/metadata\.name: traefik' -Description "only Traefik may connect to OAuth2 Proxy"
 
+$externalSecret = Get-ResourceDocument -Kind "ExternalSecret" -Name "longhorn-oauth2-proxy"
+Assert-Match -Document $externalSecret -Pattern "(?m)^\s+cookie-secret: '\{\{ \.cookieSecret \| b64dec \}\}'\s*$" -Description "the Base64 cookie secret must be decoded before mounting"
+
 Write-Output "Longhorn authentication boundary validation completed successfully."
