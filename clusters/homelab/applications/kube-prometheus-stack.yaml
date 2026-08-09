@@ -68,11 +68,16 @@ spec:
                       {{ .Annotations.impact | html }}{{ end }}{{ if and (eq .Status "firing") .Annotations.action }}
 
                       <b>Next step:</b>
-                      {{ .Annotations.action | html }}{{ end }}{{ if or .GeneratorURL .Annotations.runbook_url }}
+                      {{ .Annotations.action | html }}{{ end }}
+                      {{- if or .Annotations.logs_query .GeneratorURL .Annotations.runbook_url }}
 
-                      {{ if .GeneratorURL }}🔎 <a href="{{ .GeneratorURL | html }}">
-                      {{- if eq .Labels.category "logs" }}Open affected logs
-                      {{- else }}Open alert source{{ end }}</a>{{ end }}{{ if .Annotations.runbook_url }}
+                      {{ if .Annotations.logs_query }}
+                      {{- $pane := printf `{"alert":{"datasource":"loki","queries":[{"refId":"A","expr":%q,` .Annotations.logs_query }}
+                      {{- $pane = printf `%s"queryType":"range","datasource":{"type":"loki","uid":"loki"}}],` $pane }}
+                      {{- $pane = printf `%s"range":{"from":"now-1h","to":"now"}}}` $pane }}
+                      🔎 <a href="https://grafana.mmlinaric.com/explore?panes={{ $pane | urlquery }}&amp;schemaVersion=1&amp;orgId=1">Open affected logs</a>
+                      {{- else if .GeneratorURL }}🔎 <a href="{{ .GeneratorURL | html }}">Open alert source</a>{{ end }}
+                      {{- if .Annotations.runbook_url }}
                       📖 <a href="{{ .Annotations.runbook_url | html }}">Open runbook</a>{{ end }}{{ end }}
                       {{ end }}
               - name: "null"
@@ -123,8 +128,8 @@ spec:
             storageClassName: longhorn
             size: 5Gi
           resources:
-            requests: {cpu: 100m, memory: 192Mi}
-            limits: {cpu: 500m, memory: 512Mi}
+            requests: {cpu: 200m, memory: 256Mi}
+            limits: {cpu: 1, memory: 768Mi}
         prometheus:
           prometheusSpec:
             retention: 7d

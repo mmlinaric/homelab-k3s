@@ -125,6 +125,7 @@ spec:
                         annotations:
                           summary: GitLab is producing an elevated number of error logs
                           description: More than 20 error, fatal, or panic log lines were observed in five minutes.
+                          logs_query: '{cluster="homelab", namespace="gitlab"}'
                       - alert: KeycloakLogErrorBurst
                         expr: |
                           (
@@ -139,6 +140,7 @@ spec:
                         annotations:
                           summary: Keycloak is producing an elevated number of error logs
                           description: More than 10 error, fatal, or panic log lines were observed in five minutes.
+                          logs_query: '{cluster="homelab", namespace="keycloak"}'
                       - alert: ApplicationFatalLogDetected
                         expr: |
                           (
@@ -157,6 +159,9 @@ spec:
                           resolved_description: No fatal, panic, or out-of-memory log messages are currently being detected.
                           impact: The application process may have crashed or become unavailable.
                           action: Review surrounding logs to identify the first error preceding the fatal message.
+                          logs_query: >-
+                            {cluster="homelab", namespace="{{`{{`}} $labels.namespace {{`}}`}}",
+                            pod="{{`{{`}} $labels.pod {{`}}`}}", container="{{`{{`}} $labels.container {{`}}`}}"}
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
