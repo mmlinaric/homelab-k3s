@@ -1,0 +1,18 @@
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: kube-prometheus-stack-kube-proxy-static
+  namespace: kube-system
+  labels:
+    kubernetes.io/service-name: kube-prometheus-stack-kube-proxy
+    endpointslice.kubernetes.io/managed-by: homelab-k3s
+addressType: IPv4
+ports:
+  - name: http-metrics
+    protocol: TCP
+    port: 10249
+endpoints:
+  - addresses: [192.168.70.10]
+    conditions:
+      ready: true
+    nodeName: k3s-01
