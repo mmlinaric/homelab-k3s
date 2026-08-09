@@ -3,8 +3,6 @@
   "extends": ["config:recommended"],
   "dependencyDashboard": true,
   "automerge": false,
-  "schedule": ["before 5am on Saturday"],
-  "timezone": "Europe/Warsaw",
   "argocd": {
     "managerFilePatterns": ["/clusters/.+\\.yaml$/"]
   },
