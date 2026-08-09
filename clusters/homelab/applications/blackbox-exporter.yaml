@@ -23,6 +23,8 @@ spec:
             - name: registry
               url: https://registry.mmlinaric.com/v2/
               module: http_2xx_or_3xx_or_401
+            - name: portfolio
+              url: https://mmlinaric.com/
         config:
           modules:
             http_2xx:
@@ -45,4 +47,3 @@ spec:
   syncPolicy:
     automated: {enabled: true, prune: true, selfHeal: true}
     syncOptions: [CreateNamespace=true, ServerSideApply=true]
-

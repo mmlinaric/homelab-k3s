@@ -4,4 +4,4 @@ resources:
   - keycloak
   - gitlab
   - cloudflared
-
+  - portfolio
