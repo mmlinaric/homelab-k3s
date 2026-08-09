@@ -15,3 +15,76 @@ spec:
       path: /metrics
       interval: 30s
       scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: dependency-track
+  namespace: dependency-track
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: dependency-track.vulnerability-sources
+      interval: 1m
+      rules:
+        - alert: DependencyTrackVulnerabilityMirrorFailed
+          expr: |
+            increase(
+              dbscheduler_task_completions_total{
+                namespace="dependency-track",
+                result="failed",
+                task=~"(NVD|GitHub Advisories|OSV|EPSS) Mirror"
+              }[10m]
+            ) > 0
+          labels:
+            severity: warning
+            category: integration
+            application: dependency-track
+            notification_type: event
+          annotations:
+            summary: Dependency-Track vulnerability source mirror failed
+            description: 'The scheduled {{ $labels.task }} execution failed.'
+            impact: Dependency-Track may use outdated vulnerability intelligence until a later mirror succeeds.
+            action: Review the Dependency-Track logs for the upstream error and confirm the source configuration.
+            logs_query: >-
+              {cluster="homelab", namespace="dependency-track"} | json
+              | level=~"WARN|ERROR" | vulnDataSourceName!=""
+        - alert: DependencyTrackVulnerabilityMirrorStale
+          expr: |
+            (
+              (
+                time() - dbscheduler_task_last_run_timestamp_seconds{
+                  namespace="dependency-track",
+                  task=~"(NVD|GitHub Advisories|OSV|EPSS) Mirror"
+                } > 30 * 3600
+              )
+              and
+              dbscheduler_task_last_run_timestamp_seconds{
+                namespace="dependency-track",
+                task=~"(NVD|GitHub Advisories|OSV|EPSS) Mirror"
+              } > 0
+            )
+            or
+            (
+              dbscheduler_task_last_run_timestamp_seconds{
+                namespace="dependency-track",
+                task=~"(NVD|GitHub Advisories|OSV|EPSS) Mirror"
+              } == 0
+              and on (container, endpoint, instance, job, namespace, pod, service)
+              process_uptime_seconds{namespace="dependency-track"} > 36 * 3600
+            )
+          for: 15m
+          labels:
+            severity: warning
+            category: integration
+            application: dependency-track
+          annotations:
+            summary: Dependency-Track vulnerability source mirror is overdue
+            description: 'The scheduled {{ $labels.task }} has not completed within the expected daily window.'
+            resolved_description: 'The scheduled {{ $labels.task }} has completed again.'
+            impact: Vulnerability intelligence from this source may be stale.
+            action: Check the source configuration, outbound connectivity, credentials, and recent mirror failures.
+            logs_query: >-
+              {cluster="homelab", namespace="dependency-track"} | json
+              | vulnDataSourceName!=""

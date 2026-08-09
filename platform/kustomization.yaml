@@ -13,3 +13,4 @@ resources:
   - monitoring.yaml
   - kube-proxy-endpoint.yaml
   - backup-dashboard.yaml
+  - dependency-track-dashboard.yaml

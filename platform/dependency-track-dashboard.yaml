@@ -1,0 +1,228 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dependency-track-overview-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  dependency-track-overview.json: |
+    {
+      "annotations": {"list": []},
+      "editable": true,
+      "graphTooltip": 1,
+      "panels": [
+        {
+          "type": "stat",
+          "title": "API server uptime",
+          "gridPos": {"h": 7, "w": 4, "x": 0, "y": 0},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max(process_uptime_seconds{namespace=\"dependency-track\"})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "s", "color": {"mode": "thresholds"}},
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "reduceOptions": {"calcs": ["lastNotNull"], "values": false}
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Mirror age",
+          "description": "Time since each scheduled vulnerability-source mirror completed.",
+          "gridPos": {"h": 7, "w": 12, "x": 4, "y": 0},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "time() - dbscheduler_task_last_run_timestamp_seconds{namespace=\"dependency-track\",task=~\"(NVD|GitHub Advisories|OSV|EPSS) Mirror\"} > 0",
+              "legendFormat": "{{task}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green"},
+                  {"color": "yellow", "value": 86400},
+                  {"color": "red", "value": 108000}
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "reduceOptions": {"calcs": ["lastNotNull"], "values": false}
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Mirror failures in 24 hours",
+          "gridPos": {"h": 7, "w": 8, "x": 16, "y": 0},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (task) (increase(dbscheduler_task_completions_total{namespace=\"dependency-track\",result=\"failed\",task=~\".* Mirror\"}[24h]))",
+              "legendFormat": "{{task}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 0,
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green"}, {"color": "red", "value": 1}]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "reduceOptions": {"calcs": ["lastNotNull"], "values": false}
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Scheduled mirror duration",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 7},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "dbscheduler_task_last_run_duration{namespace=\"dependency-track\",task=~\"(NVD|GitHub Advisories|OSV|EPSS) Mirror\"}",
+              "legendFormat": "{{task}}"
+            }
+          ],
+          "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+          "options": {
+            "legend": {"displayMode": "table", "placement": "bottom", "showLegend": true},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Activity queue backlog",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 7},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "dt_dex_engine_activity_task_queue_backlog{namespace=\"dependency-track\"}",
+              "legendFormat": "{{queueName}}"
+            }
+          ],
+          "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+          "options": {
+            "legend": {"displayMode": "table", "placement": "bottom", "showLegend": true},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          }
+        },
+        {
+          "type": "gauge",
+          "title": "JVM heap usage",
+          "gridPos": {"h": 7, "w": 6, "x": 0, "y": 15},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(jvm_memory_used_bytes{namespace=\"dependency-track\",area=\"heap\"}) / sum(jvm_memory_max_bytes{namespace=\"dependency-track\",area=\"heap\"})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green"},
+                  {"color": "yellow", "value": 0.7},
+                  {"color": "red", "value": 0.85}
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}}
+        },
+        {
+          "type": "timeseries",
+          "title": "Database connection pool",
+          "gridPos": {"h": 7, "w": 8, "x": 6, "y": 15},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "hikaricp_connections_active{namespace=\"dependency-track\"}",
+              "legendFormat": "active {{pool}}"
+            },
+            {
+              "refId": "B",
+              "expr": "hikaricp_connections_pending{namespace=\"dependency-track\"}",
+              "legendFormat": "pending {{pool}}"
+            }
+          ],
+          "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+          "options": {
+            "legend": {"displayMode": "table", "placement": "bottom", "showLegend": true},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          }
+        },
+        {
+          "type": "table",
+          "title": "Scheduled mirror completion totals",
+          "gridPos": {"h": 7, "w": 10, "x": 14, "y": 15},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "dbscheduler_task_completions_total{namespace=\"dependency-track\",task=~\"(NVD|GitHub Advisories|OSV|EPSS) Mirror\"}",
+              "format": "table",
+              "instant": true
+            }
+          ],
+          "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []},
+          "options": {"showHeader": true}
+        },
+        {
+          "type": "logs",
+          "title": "Vulnerability-source activity",
+          "gridPos": {"h": 10, "w": 24, "x": 0, "y": 22},
+          "datasource": {"type": "loki", "uid": "loki"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "{cluster=\"homelab\",namespace=\"dependency-track\"} | json | vulnDataSourceName != \"\"",
+              "queryType": "range"
+            }
+          ],
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": true,
+            "showCommonLabels": false,
+            "showLabels": false,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": true
+          }
+        }
+      ],
+      "refresh": "1m",
+      "schemaVersion": 41,
+      "tags": ["homelab", "dependency-track", "security"],
+      "templating": {"list": []},
+      "time": {"from": "now-24h", "to": "now"},
+      "timezone": "browser",
+      "title": "Dependency-Track Overview",
+      "uid": "dependency-track-overview",
+      "version": 1
+    }
