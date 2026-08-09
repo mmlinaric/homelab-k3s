@@ -28,11 +28,12 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: traefik
       ports:
-        - {protocol: TCP, port: 8443}
+        # NetworkPolicy is evaluated after the Service is translated to
+        # Traefik's targetPort, rather than against the Service port.
+        - {protocol: TCP, port: 9443}
     - to:
         - ipBlock: {cidr: 0.0.0.0/0}
       ports:
         - {protocol: TCP, port: 443}
         - {protocol: TCP, port: 7844}
         - {protocol: UDP, port: 7844}
-
