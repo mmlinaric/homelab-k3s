@@ -40,6 +40,8 @@ spec:
           rulerConfig:
             alertmanager_url: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093
             enable_alertmanager_v2: true
+            external_url: https://grafana.mmlinaric.com
+            datasource_uid: loki
             evaluation:
               mode: local
             external_labels:
@@ -140,7 +142,7 @@ spec:
                       - alert: ApplicationFatalLogDetected
                         expr: |
                           (
-                            sum by (namespace) (
+                            sum by (namespace, pod, container) (
                               count_over_time({cluster="homelab", namespace=~"gitlab|keycloak"} |~ `(?i)\b(fatal|panic|out of memory)\b` [5m])
                             )
                             or on() vector(0)
@@ -150,8 +152,11 @@ spec:
                           severity: critical
                           category: logs
                         annotations:
-                          summary: A fatal application log signature was detected
-                          description: Review the affected namespace in Grafana Logs Drilldown.
+                          summary: Fatal application log detected
+                          description: 'Loki detected {{`{{`}} printf "%.0f" $value {{`}}`}} fatal, panic, or out-of-memory log messages in the last 5 minutes.'
+                          resolved_description: No fatal, panic, or out-of-memory log messages are currently being detected.
+                          impact: The application process may have crashed or become unavailable.
+                          action: Review surrounding logs to identify the first error preceding the fatal message.
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
