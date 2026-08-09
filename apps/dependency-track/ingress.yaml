@@ -1,0 +1,32 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: dependency-track
+  namespace: dependency-track
+spec:
+  secretName: dependency-track-tls
+  dnsNames: [dependency-track.mmlinaric.com]
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: dependency-track
+  namespace: dependency-track
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: Host(`dependency-track.mmlinaric.com`) && PathPrefix(`/api`)
+      kind: Rule
+      priority: 20
+      services:
+        - {name: dependency-track-apiserver, port: 8080}
+    - match: Host(`dependency-track.mmlinaric.com`)
+      kind: Rule
+      priority: 10
+      services:
+        - {name: dependency-track-frontend, port: 8080}
+  tls:
+    secretName: dependency-track-tls

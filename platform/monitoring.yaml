@@ -115,7 +115,7 @@ spec:
     - name: homelab.backups
       rules:
         - alert: VeleroScheduledBackupFailed
-          expr: velero_backup_last_status{schedule=~"(gitlab|keycloak)-(daily|weekly|monthly)"} != 1
+          expr: velero_backup_last_status{schedule=~"(gitlab|keycloak|dependency-track)-(daily|weekly|monthly)"} != 1
           for: 15m
           labels: {severity: critical}
           annotations:
@@ -134,8 +134,17 @@ spec:
           labels: {severity: critical}
           annotations:
             summary: Keycloak has no successful encrypted logical backup in the last 30 hours
+        - alert: DependencyTrackLogicalBackupStale
+          expr: >-
+            (time() - velero_backup_last_successful_timestamp{schedule="dependency-track-daily"} > 30 * 3600)
+            or absent(velero_backup_last_successful_timestamp{schedule="dependency-track-daily"})
+          for: 1h
+          labels: {severity: critical}
+          annotations:
+            summary: Dependency-Track has no successful encrypted logical backup in the last 30 hours
         - alert: VeleroBackupPartiallyFailed
-          expr: increase(velero_backup_partial_failure_total{schedule=~"(gitlab|keycloak)-(daily|weekly|monthly)"}[8h]) > 0
+          expr: >-
+            increase(velero_backup_partial_failure_total{schedule=~"(gitlab|keycloak|dependency-track)-(daily|weekly|monthly)"}[8h]) > 0
           for: 15m
           labels: {severity: warning}
           annotations:
@@ -168,6 +177,14 @@ spec:
           labels: {severity: warning}
           annotations:
             summary: Keycloak backup staging volume is more than 80 percent full
+        - alert: DependencyTrackBackupStagingNearlyFull
+          expr: >-
+            kubelet_volume_stats_used_bytes{namespace="dependency-track",persistentvolumeclaim="dependency-track-backups"}
+            / kubelet_volume_stats_capacity_bytes{namespace="dependency-track",persistentvolumeclaim="dependency-track-backups"} > 0.8
+          for: 30m
+          labels: {severity: warning}
+          annotations:
+            summary: Dependency-Track backup staging volume is more than 80 percent full
         - alert: LonghornVolumeUnhealthy
           expr: longhorn_volume_robustness{state=~"degraded|faulted"} == 1
           for: 15m

@@ -1,0 +1,203 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dependency-track-data
+  namespace: dependency-track
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dependency-track-apiserver
+  namespace: dependency-track
+  labels:
+    app.kubernetes.io/name: dependency-track
+    app.kubernetes.io/component: apiserver
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dependency-track
+      app.kubernetes.io/component: apiserver
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dependency-track
+        app.kubernetes.io/component: apiserver
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: apiserver
+          image: ghcr.io/dependencytrack/apiserver:5.0.3
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DT_DATASOURCE_URL
+              value: jdbc:postgresql://dependency-track-db-rw:5432/dependency-track
+            - name: DT_DATASOURCE_USERNAME
+              value: ${file::/run/secrets/database/username}
+            - name: DT_DATASOURCE_PASSWORD
+              value: ${file::/run/secrets/database/password}
+            - name: DT_METRICS_ENABLED
+              value: "true"
+            - name: DT_OIDC_ENABLED
+              value: "true"
+            - name: DT_OIDC_ISSUER
+              value: https://auth.mmlinaric.com/realms/homelab
+            - name: DT_OIDC_CLIENT_ID
+              value: dependency-track
+            - name: DT_OIDC_USERNAME_CLAIM
+              value: preferred_username
+            - name: DT_OIDC_USER_PROVISIONING
+              value: "true"
+            - name: DT_OIDC_TEAM_SYNCHRONIZATION
+              value: "true"
+            - name: DT_OIDC_TEAMS_CLAIM
+              value: dependency_track_roles
+            - name: EXTRA_JAVA_OPTIONS
+              value: -Dlogback.configurationFile=logback-json.xml
+          ports:
+            - {name: api, containerPort: 8080}
+            - {name: management, containerPort: 9000}
+          startupProbe:
+            httpGet: {path: /health/started, port: management}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health/ready, port: management}
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: /health/live, port: management}
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 1, memory: 2Gi}
+            limits: {cpu: 4, memory: 4Gi}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: database-credentials, mountPath: /run/secrets/database, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: dependency-track-data
+        - name: database-credentials
+          secret:
+            secretName: dependency-track-db-app
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dependency-track-apiserver
+  namespace: dependency-track
+  labels:
+    app.kubernetes.io/name: dependency-track
+    app.kubernetes.io/component: apiserver
+spec:
+  selector:
+    app.kubernetes.io/name: dependency-track
+    app.kubernetes.io/component: apiserver
+  ports:
+    - {name: api, port: 8080, targetPort: api}
+    - {name: management, port: 9000, targetPort: management}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dependency-track-frontend
+  namespace: dependency-track
+  labels:
+    app.kubernetes.io/name: dependency-track
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dependency-track
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dependency-track
+        app.kubernetes.io/component: frontend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: frontend
+          image: ghcr.io/dependencytrack/frontend:5.0.3
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: API_BASE_URL
+              value: https://dependency-track.mmlinaric.com
+            - name: OIDC_ISSUER
+              value: https://auth.mmlinaric.com/realms/homelab
+            - name: OIDC_CLIENT_ID
+              value: dependency-track
+            - name: OIDC_SCOPE
+              value: openid profile email
+            - name: OIDC_LOGIN_BUTTON_TEXT
+              value: Login with Keycloak
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /, port: http}
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: /, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dependency-track-frontend
+  namespace: dependency-track
+spec:
+  selector:
+    app.kubernetes.io/name: dependency-track
+    app.kubernetes.io/component: frontend
+  ports:
+    - {name: http, port: 8080, targetPort: http}

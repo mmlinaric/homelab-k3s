@@ -75,6 +75,20 @@ kubectl -n keycloak-logical-restore exec backup-inspector -- sh -ec 'cd /backups
 
 For a full logical drill, create an empty isolated PostgreSQL 18 cluster with database and owner `keycloak`, then import with `pg_restore --exit-on-error --no-owner --no-acl`. Start a temporary Keycloak instance against it and verify realms, clients, users, and sign-in.
 
+## Dependency-Track logical restore drill
+
+Restore the staging PVC from the latest completed `dependency-track-daily` backup into an isolated namespace, following the Keycloak procedure with these substitutions:
+
+| Keycloak value | Dependency-Track value |
+| --- | --- |
+| `keycloak-daily` | `dependency-track-daily` |
+| `keycloak` | `dependency-track` |
+| `keycloak-logical-restore` | `dependency-track-logical-restore` |
+| `keycloak-backups` | `dependency-track-backups` |
+| `keycloak-*.dump.sha256` | `dependency-track-*.dump.sha256` |
+
+Validate the checksum and archive with `sha256sum -c` and `pg_restore --list`. For a full drill, create an isolated PostgreSQL 18 cluster with database and owner `dependency-track`, import using `pg_restore --exit-on-error --no-owner --no-acl`, and start the same or a newer Dependency-Track API server. Confirm `/health/ready` returns `UP`, sign-in works, projects are present, and a test SBOM analysis completes.
+
 ## K3s control-plane restore
 
 Provision an Ubuntu host with the pinned K3s version and retrieve the K3s token and S3 credentials from the offline recovery kit. Kubernetes Secrets are unavailable until etcd has been restored.

@@ -212,6 +212,102 @@ spec:
 apiVersion: velero.io/v1
 kind: Schedule
 metadata:
+  name: dependency-track-daily
+  namespace: velero
+spec:
+  schedule: "0 1 * * *"
+  template:
+    includedNamespaces: [dependency-track]
+    excludedResources: [secrets]
+    labelSelector:
+      matchLabels:
+        backup.homelab/strategy: velero
+    storageLocation: default
+    snapshotVolumes: true
+    snapshotMoveData: true
+    itemOperationTimeout: 4h
+    ttl: 336h
+    hooks:
+      resources:
+        - name: dependency-track-logical-backup
+          includedNamespaces: [dependency-track]
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: dependency-track-logical-backup
+          pre:
+            - exec:
+                container: postgres-client
+                command: [/bin/sh, /scripts/backup.sh]
+                onError: Fail
+                timeout: 1h
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: dependency-track-weekly
+  namespace: velero
+spec:
+  schedule: "0 3 * * 0"
+  template:
+    includedNamespaces: [dependency-track]
+    excludedResources: [secrets]
+    labelSelector:
+      matchLabels:
+        backup.homelab/strategy: velero
+    storageLocation: default
+    snapshotVolumes: true
+    snapshotMoveData: true
+    itemOperationTimeout: 4h
+    ttl: 1344h
+    hooks:
+      resources:
+        - name: dependency-track-logical-backup
+          includedNamespaces: [dependency-track]
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: dependency-track-logical-backup
+          pre:
+            - exec:
+                container: postgres-client
+                command: [/bin/sh, /scripts/backup.sh]
+                onError: Fail
+                timeout: 1h
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: dependency-track-monthly
+  namespace: velero
+spec:
+  schedule: "0 5 1 * *"
+  template:
+    includedNamespaces: [dependency-track]
+    excludedResources: [secrets]
+    labelSelector:
+      matchLabels:
+        backup.homelab/strategy: velero
+    storageLocation: default
+    snapshotVolumes: true
+    snapshotMoveData: true
+    itemOperationTimeout: 4h
+    ttl: 8784h
+    hooks:
+      resources:
+        - name: dependency-track-logical-backup
+          includedNamespaces: [dependency-track]
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: dependency-track-logical-backup
+          pre:
+            - exec:
+                container: postgres-client
+                command: [/bin/sh, /scripts/backup.sh]
+                onError: Fail
+                timeout: 1h
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
   name: keycloak-weekly
   namespace: velero
 spec:

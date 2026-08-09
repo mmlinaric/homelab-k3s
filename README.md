@@ -55,6 +55,7 @@ The design targets a 24-hour RPO and uses several independent layers:
 | K3s control plane | Encrypted etcd snapshots to OVH Object Storage | Every 12 hours |
 | GitLab application data | Native GitLab backup staged on a dedicated PVC, then Velero CSI data movement with Kopia to S3 | Daily, weekly, monthly |
 | Keycloak database | Validated logical dump moved through Velero and Kopia | Daily, weekly, and monthly logical backups |
+| Dependency-Track database | Validated logical dump moved through Velero and Kopia | Daily, weekly, and monthly logical backups |
 | Local recovery points | Longhorn snapshots with integrity checks | Daily snapshots, weekly cleanup and integrity check |
 
 Velero is intentionally not used for the live GitLab or Keycloak database volumes. Application-native backups provide the consistency boundary, and Velero moves the GitLab and Keycloak staging PVCs off site. See [docs/backups.md](docs/backups.md) for retention, verification, and recovery details.

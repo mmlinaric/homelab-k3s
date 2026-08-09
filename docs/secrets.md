@@ -112,10 +112,13 @@ Create confidential clients in the `homelab` realm:
 | `grafana` | `https://grafana.mmlinaric.com/login/generic_oauth` |
 | `argocd` | `https://argocd.mmlinaric.com/auth/callback` |
 | `longhorn` | `https://longhorn.mmlinaric.com/oauth2/callback` |
+| `dependency-track` | `https://dependency-track.mmlinaric.com/static/oidc-callback.html` |
 
 For Grafana, add a client role named `admin` and assign it only to administrators. The default mapped role is Viewer.
 
 For Longhorn, enable client authentication and the standard authorization-code flow, require PKCE with method `S256`, and disable direct access grants. Add a client role named `admin` and assign it only to Longhorn administrators. Add an audience mapper that includes `longhorn` in both the ID and access tokens. OAuth2 Proxy rejects authenticated users who do not have the `longhorn:admin` client role.
+
+For Dependency-Track, use a public client with client authentication disabled, the standard authorization-code flow enabled, direct access grants disabled, and PKCE method `S256`. Set the web origin to `https://dependency-track.mmlinaric.com`. No post-logout redirect URI is required. Add an `admin` client role and assign it to the `homelab-admins` group. Add a User Client Role mapper for the `dependency-track` client that emits a multivalued string claim named `dependency_track_roles` in ID tokens, access tokens, and UserInfo. Dependency-Track maps the `admin` claim value to its Administrators team.
 
 ## Offline recovery kit
 

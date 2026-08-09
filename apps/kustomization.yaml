@@ -5,3 +5,4 @@ resources:
   - gitlab
   - cloudflared
   - portfolio
+  - dependency-track
