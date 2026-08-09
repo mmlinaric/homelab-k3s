@@ -1,7 +1,13 @@
 extends: default
 rules:
+  braces:
+    max-spaces-inside: 1
+  comments-indentation: false
   line-length:
     max: 180
+  octal-values:
+    forbid-explicit-octal: true
+    forbid-implicit-octal: true
   truthy:
     allowed-values: ["true", "false"]
     check-keys: false

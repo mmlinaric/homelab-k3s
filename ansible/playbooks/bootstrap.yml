@@ -56,12 +56,7 @@
           fs.inotify.max_user_instances = 1024
           fs.inotify.max_user_watches = 1048576
           fs.inotify.max_queued_events = 32768
-      register: inotify_limits
-
-    - name: Apply inotify limits
-      ansible.builtin.command: sysctl -p /etc/sysctl.d/90-homelab-k3s.conf
-      when: inotify_limits.changed
-      changed_when: false
+      notify: Apply inotify limits
 
     - name: Disable swap immediately
       ansible.builtin.command: swapoff -a
@@ -83,7 +78,7 @@
 
     - name: Write K3s configuration
       ansible.builtin.template:
-        src: ../templates/k3s-config.yaml.j2
+        src: "{{ playbook_dir | dirname }}/templates/k3s-config.yaml.j2"
         dest: /etc/rancher/k3s/config.yaml
         owner: root
         group: root
@@ -112,6 +107,7 @@
         INSTALL_K3S_VERSION: "{{ k3s_version }}"
         INSTALL_K3S_EXEC: server
       when: k3s_version not in installed_k3s.stdout
+      changed_when: true
       notify: Restart K3s
 
     - name: Flush K3s restart handlers
@@ -127,7 +123,7 @@
 
     - name: Render kube-vip resources
       ansible.builtin.template:
-        src: ../templates/kube-vip.yaml.j2
+        src: "{{ playbook_dir | dirname }}/templates/kube-vip.yaml.j2"
         dest: /var/lib/rancher/k3s/server/manifests/kube-vip.yaml
         owner: root
         group: root
@@ -177,7 +173,7 @@
 
     - name: Copy bootstrap chart values
       ansible.builtin.copy:
-        src: "../files/{{ item }}"
+        src: "{{ playbook_dir | dirname }}/files/{{ item }}"
         dest: "/var/lib/rancher/k3s/server/{{ item }}"
         owner: root
         group: root
@@ -220,7 +216,7 @@
 
     - name: Copy Bitwarden SDK certificate resources
       ansible.builtin.copy:
-        src: ../files/bitwarden-sdk-certificates.yaml
+        src: "{{ playbook_dir | dirname }}/files/bitwarden-sdk-certificates.yaml"
         dest: /var/lib/rancher/k3s/server/bitwarden-sdk-certificates.yaml
         owner: root
         group: root
@@ -330,6 +326,10 @@
       become: false
 
   handlers:
+    - name: Apply inotify limits
+      ansible.builtin.command: sysctl -p /etc/sysctl.d/90-homelab-k3s.conf
+      changed_when: true
+
     - name: Restart K3s
       ansible.builtin.systemd_service:
         name: k3s

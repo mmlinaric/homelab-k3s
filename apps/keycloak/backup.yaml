@@ -128,6 +128,6 @@ spec:
         - name: scripts
           configMap:
             name: keycloak-logical-backup
-            defaultMode: 0555
+            defaultMode: 365
         - name: tmp
           emptyDir: {}
