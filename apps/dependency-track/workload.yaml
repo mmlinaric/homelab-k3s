@@ -46,7 +46,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: apiserver
-          image: ghcr.io/dependencytrack/apiserver:5.0.3
+          image: ghcr.io/dependencytrack/apiserver:5.0.4
           imagePullPolicy: IfNotPresent
           env:
             - name: DT_DATASOURCE_URL
@@ -157,7 +157,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: frontend
-          image: ghcr.io/dependencytrack/frontend:5.0.3
+          image: ghcr.io/dependencytrack/frontend:5.0.4
           imagePullPolicy: IfNotPresent
           env:
             - name: API_BASE_URL
