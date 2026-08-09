@@ -3,6 +3,8 @@ kind: PersistentVolumeClaim
 metadata:
   name: dependency-track-data
   namespace: dependency-track
+  labels:
+    backup.homelab/strategy: velero
   annotations:
     argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
 spec:

@@ -51,7 +51,9 @@ Keycloak recovery is limited to the latest successfully completed logical backup
 
 ## Dependency-Track consistency boundary
 
-Dependency-Track uses the same logical backup pattern as Keycloak. Before Velero snapshots the `dependency-track-backups` staging PVC, it runs `pg_dump`, validates the custom-format archive with `pg_restore --list`, and writes a SHA-256 checksum. The live CNPG volume is not selected. Dependency-Track file storage only contains short-lived in-flight artifacts, so it is intentionally excluded; failed in-flight uploads can be retried after recovery.
+Dependency-Track uses the same logical database backup pattern as Keycloak. Before Velero snapshots the `dependency-track-backups` staging PVC, it runs `pg_dump`, validates the custom-format archive with `pg_restore --list`, and writes a SHA-256 checksum. The live CNPG volume is not selected.
+
+The same Velero recovery point also moves the `dependency-track-data` PVC through Kopia. Most of this volume is optional short-lived file storage, but `/data/.dependency-track/keys/secret-management-kek.json` is required to decrypt integration secrets stored in PostgreSQL. Kopia encrypts both PVCs before upload; the OVH S3 provider cannot read the dump, keyset, or transient files without the repository password held in Bitwarden and the offline recovery kit. After KEK rotation, trigger and verify a new backup immediately.
 
 | Schedule | Cron | TTL |
 | --- | --- | --- |
@@ -59,7 +61,7 @@ Dependency-Track uses the same logical backup pattern as Keycloak. Before Velero
 | `dependency-track-weekly` | 03:00 Sunday | 1344h |
 | `dependency-track-monthly` | 05:00 on day 1 | 8784h |
 
-Restore the database into the same or a newer Dependency-Track version. Start one API server after import, wait for its readiness endpoint, and let schema migrations complete before restoring normal replica counts.
+Restore the database and `dependency-track-data` PVC from the same recovery point into the same or a newer Dependency-Track version. Start one API server after import, wait for its readiness endpoint, and let schema migrations complete before restoring normal replica counts.
 
 ## First backup activation
 

@@ -87,7 +87,9 @@ Restore the staging PVC from the latest completed `dependency-track-daily` backu
 | `keycloak-backups` | `dependency-track-backups` |
 | `keycloak-*.dump.sha256` | `dependency-track-*.dump.sha256` |
 
-Validate the checksum and archive with `sha256sum -c` and `pg_restore --list`. For a full drill, create an isolated PostgreSQL 18 cluster with database and owner `dependency-track`, import using `pg_restore --exit-on-error --no-owner --no-acl`, and start the same or a newer Dependency-Track API server. Confirm `/health/ready` returns `UP`, sign-in works, projects are present, and a test SBOM analysis completes.
+Restore both `dependency-track-backups` and `dependency-track-data` from the same recovery point. Before starting Dependency-Track, confirm `dependency-track-data` contains `.dependency-track/keys/secret-management-kek.json` and keep its contents out of logs and restore evidence.
+
+Validate the dump checksum and archive with `sha256sum -c` and `pg_restore --list`. For a full drill, create an isolated PostgreSQL 18 cluster with database and owner `dependency-track`, import using `pg_restore --exit-on-error --no-owner --no-acl`, mount the restored data PVC, and start the same or a newer Dependency-Track API server. Confirm `/health/ready` returns `UP`, sign-in works, projects are present, stored integration secrets remain usable, and a test SBOM analysis completes.
 
 ## K3s control-plane restore
 
