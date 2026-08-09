@@ -15,6 +15,10 @@
       "groupName": "cluster dependencies"
     },
     {
+      "matchPackageNames": ["python", "ansible-core", "ansible-lint", "yamllint"],
+      "groupName": "CI Python toolchain"
+    },
+    {
       "matchUpdateTypes": ["major"],
       "dependencyDashboardApproval": true
     }
