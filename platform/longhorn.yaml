@@ -22,6 +22,143 @@ spec:
   retain: 0
   concurrency: 1
 ---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: longhorn-oauth2-proxy
+  namespace: longhorn-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: bitwarden
+    kind: ClusterSecretStore
+  target:
+    name: longhorn-oauth2-proxy
+    creationPolicy: Owner
+  data:
+    - secretKey: client-secret
+      remoteRef:
+        key: 581c8611-946d-4941-805a-b4a100d27e87
+    - secretKey: cookie-secret
+      remoteRef:
+        key: ba8d842a-05b0-433c-ac9f-b4a100d323a8
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: longhorn-oauth2-proxy
+  namespace: longhorn-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: longhorn-oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: longhorn-oauth2-proxy
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
+          args:
+            - --http-address=0.0.0.0:4180
+            - --provider=keycloak-oidc
+            - --oidc-issuer-url=https://auth.mmlinaric.com/realms/homelab
+            - --client-id=longhorn
+            - --client-secret-file=/etc/oauth2-proxy/secrets/client-secret
+            - --cookie-secret-file=/etc/oauth2-proxy/secrets/cookie-secret
+            - --redirect-url=https://longhorn.mmlinaric.com/oauth2/callback
+            - --allowed-role=longhorn:admin
+            - --email-domain=*
+            - --scope=openid profile email roles
+            - --code-challenge-method=S256
+            - --upstream=static://202
+            - --reverse-proxy=true
+            - --trusted-proxy-ip=10.42.0.0/16
+            - --skip-provider-button=true
+            - --cookie-name=__Host-longhorn_oauth2_proxy
+            - --cookie-secure=true
+            - --cookie-httponly=true
+            - --cookie-samesite=lax
+            - --cookie-expire=8h
+            - --cookie-refresh=1h
+            - --pass-access-token=false
+            - --pass-authorization-header=false
+            - --set-authorization-header=false
+          ports:
+            - name: http
+              containerPort: 4180
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 25m, memory: 32Mi}
+            limits: {cpu: 250m, memory: 128Mi}
+          volumeMounts:
+            - name: secrets
+              mountPath: /etc/oauth2-proxy/secrets
+              readOnly: true
+      volumes:
+        - name: secrets
+          secret:
+            secretName: longhorn-oauth2-proxy
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: longhorn-oauth2-proxy
+  namespace: longhorn-system
+spec:
+  selector:
+    app.kubernetes.io/name: longhorn-oauth2-proxy
+  ports:
+    - name: http
+      port: 4180
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-oauth2-proxy
+  namespace: longhorn-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: longhorn-oauth2-proxy
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+      ports:
+        - port: 4180
+          protocol: TCP
+---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -35,6 +172,26 @@ spec:
     kind: ClusterIssuer
 ---
 apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: longhorn-lan-only
+  namespace: longhorn-system
+spec:
+  ipAllowList:
+    sourceRange:
+      - 192.168.70.0/24
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: longhorn-forward-auth
+  namespace: longhorn-system
+spec:
+  forwardAuth:
+    address: http://longhorn-oauth2-proxy.longhorn-system.svc.cluster.local:4180/
+    trustForwardHeader: true
+---
+apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: longhorn-lan
@@ -42,8 +199,20 @@ metadata:
 spec:
   entryPoints: [websecure]
   routes:
+    - match: Host(`longhorn.mmlinaric.com`) && PathPrefix(`/oauth2/`)
+      kind: Rule
+      priority: 20
+      middlewares:
+        - name: longhorn-lan-only
+      services:
+        - name: longhorn-oauth2-proxy
+          port: 4180
     - match: Host(`longhorn.mmlinaric.com`)
       kind: Rule
+      priority: 10
+      middlewares:
+        - name: longhorn-lan-only
+        - name: longhorn-forward-auth
       services:
         - name: longhorn-frontend
           port: 80

@@ -13,6 +13,8 @@ foreach ($target in $targets) {
     }
 }
 
+& (Join-Path $PSScriptRoot "validate-longhorn-auth.ps1") -RenderedManifest (Join-Path $renderDirectory "platform.yaml")
+
 if (Get-Command kubeconform -ErrorAction SilentlyContinue) {
     kubeconform -kubernetes-version 1.36.0 -strict -summary -ignore-missing-schemas $renderDirectory
     if ($LASTEXITCODE -ne 0) {

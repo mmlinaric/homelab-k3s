@@ -71,6 +71,7 @@ Create one Bitwarden secret per value below. Replace each `CHANGE_ME_BWS_*_ID` i
 | Alertmanager | Telegram bot token and numeric chat ID |
 | K3s etcd | etcd S3 access key, secret key, bucket name, OVH endpoint host name, OVH region |
 | Argo CD | Keycloak OIDC client secret |
+| Longhorn | Keycloak OIDC client secret, OAuth2 Proxy cookie secret |
 
 Generate the Kopia repository password once, before the first Velero backup:
 
@@ -79,6 +80,12 @@ openssl rand -base64 48
 ```
 
 Store it in Bitwarden and in the encrypted offline recovery kit. Never rotate it for an existing repository.
+
+Generate the Longhorn OAuth2 Proxy cookie secret once and store its Base64 output in Bitwarden:
+
+```bash
+openssl rand -base64 32
+```
 
 Replace these non-secret placeholders directly in Git:
 
@@ -104,8 +111,11 @@ Create confidential clients in the `homelab` realm:
 | `gitlab` | `https://gitlab.mmlinaric.com/users/auth/openid_connect/callback` |
 | `grafana` | `https://grafana.mmlinaric.com/login/generic_oauth` |
 | `argocd` | `https://argocd.mmlinaric.com/auth/callback` |
+| `longhorn` | `https://longhorn.mmlinaric.com/oauth2/callback` |
 
 For Grafana, add a client role named `admin` and assign it only to administrators. The default mapped role is Viewer.
+
+For Longhorn, enable client authentication and the standard authorization-code flow, require PKCE with method `S256`, and disable direct access grants. Add a client role named `admin` and assign it only to Longhorn administrators. Add an audience mapper that includes `longhorn` in both the ID and access tokens. OAuth2 Proxy rejects authenticated users who do not have the `longhorn:admin` client role.
 
 ## Offline recovery kit
 

@@ -22,6 +22,15 @@ kubectl get etcdsnapshotfile
 kubectl get certificate -A
 ```
 
+Longhorn access requires both a client address in `192.168.70.0/24` and the Keycloak client role `longhorn:admin`. Verify the controls after authentication or network changes:
+
+```bash
+curl -Ik --resolve longhorn.mmlinaric.com:443:192.168.70.100 https://longhorn.mmlinaric.com/
+kubectl -n longhorn-system logs deployment/longhorn-oauth2-proxy
+```
+
+An unauthenticated LAN request must redirect to Keycloak. A user without `longhorn:admin` must receive an authorization failure, while a user with the role must reach the Longhorn UI. A request originating outside `192.168.70.0/24` must receive HTTP 403 before authentication.
+
 ## Manual backup before risky work
 
 ```bash
