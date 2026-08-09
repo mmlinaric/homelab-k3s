@@ -11,6 +11,8 @@ write-kubeconfig-mode: "0640"
 cluster-cidr: "{{ k3s_cluster_cidr }}"
 service-cidr: "{{ k3s_service_cidr }}"
 flannel-iface: "{{ k3s_interface }}"
+kube-proxy-arg:
+  - "metrics-bind-address={{ node_ip }}:10249"
 disable:
   - traefik
   - servicelb

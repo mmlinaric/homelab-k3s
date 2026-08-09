@@ -12,3 +12,4 @@ rules:
     max-end: 1
 ignore: |
   ansible/templates/
+  rendered/
