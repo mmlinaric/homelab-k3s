@@ -22,6 +22,31 @@ kubectl get etcdsnapshotfile
 kubectl get certificate -A
 ```
 
+## Centralized logs
+
+Grafana Explore has a provisioned `Loki` data source. Alloy runs once per node and collects the containers on that node through the Kubernetes pod log API. Loki retains logs for seven days on a 10 Gi Longhorn volume.
+
+Useful LogQL queries:
+
+```logql
+{cluster="homelab"}
+{cluster="homelab", namespace="gitlab"}
+{cluster="homelab", namespace="keycloak"} |= "error"
+```
+
+Check the pipeline without exposing Loki outside the cluster:
+
+```bash
+kubectl -n monitoring get pods -l app.kubernetes.io/instance=loki
+kubectl -n monitoring get pvc storage-loki-0
+kubectl -n monitoring get daemonset alloy
+kubectl -n monitoring logs daemonset/alloy --tail=100
+kubectl -n monitoring port-forward service/loki 3100:3100
+curl -fsS http://127.0.0.1:3100/ready
+```
+
+Retention is enforced by Loki's compactor. Increase both `loki.limits_config.retention_period` and the `singleBinary.persistence.size` value together if seven days consistently approaches the volume capacity.
+
 Longhorn access requires both a client address in the administrator LAN `192.168.88.0/24` and the Keycloak client role `longhorn:admin`. Verify the controls after authentication or network changes:
 
 ```bash

@@ -50,6 +50,15 @@ spec:
               requests: {cpu: 50m, memory: 128Mi}
               limits: {cpu: 300m, memory: 384Mi}
         grafana:
+          additionalDataSources:
+            - name: Loki
+              uid: loki
+              type: loki
+              access: proxy
+              url: http://loki.monitoring.svc.cluster.local:3100
+              jsonData:
+                maxLines: 1000
+                timeout: 60
           envFromSecret: grafana-oidc
           grafana.ini:
             server:

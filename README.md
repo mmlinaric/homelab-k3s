@@ -10,9 +10,11 @@ LAN DNS  -> 192.168.70.100 -> Traefik websecure entrypoint -> all LAN routes
                                       |
                            GitLab and Keycloak
                                       |
-                       Longhorn PVCs and CNPG
+                  Longhorn PVCs, CNPG, and Loki
                                       |
                         OVH Object Storage
+
+Alloy DaemonSet -> Kubernetes pod log API -> Loki -> Grafana Explore
 
 Operator -> 192.168.70.5 -> kube-vip -> K3s API
 Git push -> GitHub main -> Argo CD auto-sync
