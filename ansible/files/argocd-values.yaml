@@ -6,6 +6,55 @@ configs:
   cm:
     admin.enabled: true
     url: https://argocd.mmlinaric.com
+    resource.exclusions: |
+      # Keep legacy and high-churn control-plane resources out of Argo CD while
+      # allowing declarative discovery.k8s.io EndpointSlice resources.
+      - apiGroups:
+          - ""
+        kinds:
+          - Endpoints
+      - apiGroups:
+          - coordination.k8s.io
+        kinds:
+          - Lease
+      - apiGroups:
+          - authentication.k8s.io
+          - authorization.k8s.io
+        kinds:
+          - SelfSubjectReview
+          - TokenReview
+          - LocalSubjectAccessReview
+          - SelfSubjectAccessReview
+          - SelfSubjectRulesReview
+          - SubjectAccessReview
+      - apiGroups:
+          - certificates.k8s.io
+        kinds:
+          - CertificateSigningRequest
+      - apiGroups:
+          - cert-manager.io
+        kinds:
+          - CertificateRequest
+      - apiGroups:
+          - cilium.io
+        kinds:
+          - CiliumIdentity
+          - CiliumEndpoint
+          - CiliumEndpointSlice
+      - apiGroups:
+          - kyverno.io
+          - reports.kyverno.io
+          - wgpolicyk8s.io
+        kinds:
+          - PolicyReport
+          - ClusterPolicyReport
+          - EphemeralReport
+          - ClusterEphemeralReport
+          - AdmissionReport
+          - ClusterAdmissionReport
+          - BackgroundScanReport
+          - ClusterBackgroundScanReport
+          - UpdateRequest
     oidc.config: |
       name: Keycloak
       issuer: https://auth.mmlinaric.com/realms/homelab
@@ -55,4 +104,3 @@ dex:
   enabled: false
 redis-ha:
   enabled: false
-
