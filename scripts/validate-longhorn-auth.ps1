@@ -56,7 +56,7 @@ if ([regex]::Matches($ingress, '(?m)^\s+- name: longhorn-frontend\s*$').Count -n
 }
 
 $lanOnly = Get-ResourceDocument -Kind "Middleware" -Name "longhorn-lan-only"
-Assert-Match -Document $lanOnly -Pattern '(?m)^\s+- 192\.168\.70\.0/24\s*$' -Description "the source restriction must allow only the homelab LAN"
+Assert-Match -Document $lanOnly -Pattern '(?m)^\s+- 192\.168\.88\.0/24\s*$' -Description "the source restriction must allow only the administrator LAN"
 
 $forwardAuth = Get-ResourceDocument -Kind "Middleware" -Name "longhorn-forward-auth"
 Assert-Match -Document $forwardAuth -Pattern '(?m)^    address: http://longhorn-oauth2-proxy\.longhorn-system\.svc\.cluster\.local:4180/\s*$' -Description "ForwardAuth must use the in-cluster OAuth2 Proxy"
