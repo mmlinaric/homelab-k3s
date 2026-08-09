@@ -22,7 +22,7 @@ spec:
       terminationGracePeriodSeconds: 180
       initContainers:
         - name: restore-secrets
-          image: busybox:1.37.0
+          image: busybox:1.38.0
           command:
             - sh
             - -ec
