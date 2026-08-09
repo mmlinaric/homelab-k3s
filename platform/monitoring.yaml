@@ -174,3 +174,39 @@ spec:
           labels: {severity: critical}
           annotations:
             summary: "Longhorn volume {{ $labels.pvc_namespace }}/{{ $labels.pvc }} is {{ $labels.state }}"
+    - name: homelab.logging
+      rules:
+        - alert: LoggingPipelineUnavailable
+          expr: >-
+            absent(up{namespace="monitoring", service="loki"})
+            or max(up{namespace="monitoring", service="loki"}) == 0
+          for: 5m
+          labels: {severity: critical}
+          annotations:
+            summary: Loki is unavailable to the monitoring pipeline
+        - alert: AlloyDaemonSetUnavailable
+          expr: kube_daemonset_status_number_unavailable{namespace="monitoring", daemonset="alloy"} > 0
+          for: 10m
+          labels: {severity: warning}
+          annotations:
+            summary: Alloy is unavailable on at least one Kubernetes node
+        - alert: AlloyDroppingLogs
+          expr: sum(increase(loki_write_dropped_entries_total{namespace="monitoring"}[10m])) > 0
+          for: 5m
+          labels: {severity: critical}
+          annotations:
+            summary: Alloy is dropping log entries after exhausting retries
+        - alert: LokiCanaryMissingEntries
+          expr: sum(increase(loki_canary_missing_entries_total{namespace="monitoring"}[10m])) > 0
+          for: 5m
+          labels: {severity: critical}
+          annotations:
+            summary: Loki Canary cannot retrieve logs that it submitted
+        - alert: LokiStorageNearlyFull
+          expr: >-
+            kubelet_volume_stats_used_bytes{namespace="monitoring", persistentvolumeclaim="storage-loki-0"}
+            / kubelet_volume_stats_capacity_bytes{namespace="monitoring", persistentvolumeclaim="storage-loki-0"} > 0.8
+          for: 30m
+          labels: {severity: warning}
+          annotations:
+            summary: Loki storage is more than 80 percent full

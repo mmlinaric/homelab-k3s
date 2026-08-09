@@ -37,9 +37,29 @@ spec:
             working_directory: /var/loki/compactor
             retention_enabled: true
             delete_request_store: filesystem
+          rulerConfig:
+            alertmanager_url: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093
+            enable_alertmanager_v2: true
+            evaluation:
+              mode: local
+            external_labels:
+              cluster: homelab
+            rule_path: /var/loki/ruler
+            storage:
+              type: local
+              local:
+                directory: /etc/loki/rules
         singleBinary:
           replicas: 1
           sidecar: false
+          extraVolumes:
+            - name: application-alert-rules
+              configMap:
+                name: loki-application-alert-rules
+          extraVolumeMounts:
+            - name: application-alert-rules
+              mountPath: /etc/loki/rules/fake
+              readOnly: true
           persistence:
             enabled: true
             storageClass: longhorn
@@ -65,8 +85,73 @@ spec:
           serviceMonitor:
             enabled: true
             interval: 60s
+          rules:
+            enabled: true
+            labels:
+              release: kube-prometheus-stack
+          alerts:
+            enabled: true
+            disabled:
+              LokiCompactorHasNotSuccessfullyRunCompaction: true
+            labels:
+              release: kube-prometheus-stack
         serviceAccount:
           automountServiceAccountToken: false
+        extraObjects:
+          - apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: loki-application-alert-rules
+              namespace: monitoring
+            data:
+              application-alerts.yaml: |
+                groups:
+                  - name: homelab.application-logs
+                    interval: 1m
+                    rules:
+                      - alert: GitLabLogErrorBurst
+                        expr: |
+                          (
+                            sum(count_over_time({cluster="homelab", namespace="gitlab"} |~ `(?i)\b(error|fatal|panic)\b` [5m]))
+                            or on() vector(0)
+                          ) > 20
+                        for: 10m
+                        labels:
+                          severity: warning
+                          category: logs
+                          application: gitlab
+                        annotations:
+                          summary: GitLab is producing an elevated number of error logs
+                          description: More than 20 error, fatal, or panic log lines were observed in five minutes.
+                      - alert: KeycloakLogErrorBurst
+                        expr: |
+                          (
+                            sum(count_over_time({cluster="homelab", namespace="keycloak"} |~ `(?i)\b(error|fatal|panic)\b` [5m]))
+                            or on() vector(0)
+                          ) > 10
+                        for: 10m
+                        labels:
+                          severity: warning
+                          category: logs
+                          application: keycloak
+                        annotations:
+                          summary: Keycloak is producing an elevated number of error logs
+                          description: More than 10 error, fatal, or panic log lines were observed in five minutes.
+                      - alert: ApplicationFatalLogDetected
+                        expr: |
+                          (
+                            sum by (namespace) (
+                              count_over_time({cluster="homelab", namespace=~"gitlab|keycloak"} |~ `(?i)\b(fatal|panic|out of memory)\b` [5m])
+                            )
+                            or on() vector(0)
+                          ) > 0
+                        for: 1m
+                        labels:
+                          severity: critical
+                          category: logs
+                        annotations:
+                          summary: A fatal application log signature was detected
+                          description: Review the affected namespace in Grafana Logs Drilldown.
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

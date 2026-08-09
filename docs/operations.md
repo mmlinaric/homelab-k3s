@@ -47,6 +47,8 @@ curl -fsS http://127.0.0.1:3100/ready
 
 Retention is enforced by Loki's compactor. Increase both `loki.limits_config.retention_period` and the `singleBinary.persistence.size` value together if seven days consistently approaches the volume capacity.
 
+Logging alerts use two paths. Prometheus evaluates Loki, Alloy, canary, and storage health rules. Loki's ruler evaluates LogQL rules for GitLab and Keycloak error bursts and fatal signatures. Both paths send firing alerts to the existing Alertmanager and Telegram receiver. Keep generic error thresholds conservative; add application-specific signatures only after confirming the exact production log format in Logs Drilldown.
+
 Longhorn access requires both a client address in the administrator LAN `192.168.88.0/24` and the Keycloak client role `longhorn:admin`. Verify the controls after authentication or network changes:
 
 ```bash
