@@ -35,7 +35,7 @@ metadata:
 spec:
   entryPoints: [tunnel]
   routes:
-    - match: Host(`gitlab.mmlinaric.com`) && !PathPrefix(`/admin`) && !PathPrefix(`/api/v4/admin`)
+    - match: Host(`gitlab.mmlinaric.com`)
       kind: Rule
       services:
         - {name: gitlab-web, port: 8080}
@@ -71,4 +71,3 @@ spec:
         - {name: gitlab-registry, port: 5000}
   tls:
     secretName: gitlab-tls
-
