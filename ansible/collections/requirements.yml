@@ -1,5 +1,5 @@
 collections:
   - name: community.general
-    version: 11.3.0
+    version: 11.4.9
   - name: kubernetes.core
     version: 6.2.0
