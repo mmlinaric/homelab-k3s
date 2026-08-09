@@ -3,7 +3,6 @@
   "extends": ["config:recommended"],
   "dependencyDashboard": true,
   "automerge": false,
-  "rebaseWhen": "behind-base-branch",
   "argocd": {
     "managerFilePatterns": ["/clusters/.+\\.yaml$/"]
   },
