@@ -19,7 +19,8 @@ data:
           "targets": [
             {
               "refId": "A",
-              "expr": "max(process_uptime_seconds{namespace=\"dependency-track\"})"
+              "expr": "max(process_uptime_seconds{namespace=\"dependency-track\"})",
+              "instant": true
             }
           ],
           "fieldConfig": {
@@ -40,13 +41,39 @@ data:
           "targets": [
             {
               "refId": "A",
-              "expr": "time() - dbscheduler_task_last_run_timestamp_seconds{namespace=\"dependency-track\",task=~\"(NVD|GitHub Advisories|OSV|EPSS) Mirror\"} > 0",
-              "legendFormat": "{{task}}"
+              "expr": "time() - max(dbscheduler_task_last_run_timestamp_seconds{namespace=\"dependency-track\",task=\"EPSS Mirror\"} > 0) or vector(0)",
+              "legendFormat": "EPSS Mirror",
+              "instant": true
+            },
+            {
+              "refId": "B",
+              "expr": "time() - max(dbscheduler_task_last_run_timestamp_seconds{namespace=\"dependency-track\",task=\"GitHub Advisories Mirror\"} > 0) or vector(0)",
+              "legendFormat": "GitHub Advisories Mirror",
+              "instant": true
+            },
+            {
+              "refId": "C",
+              "expr": "time() - max(dbscheduler_task_last_run_timestamp_seconds{namespace=\"dependency-track\",task=\"NVD Mirror\"} > 0) or vector(0)",
+              "legendFormat": "NVD Mirror",
+              "instant": true
+            },
+            {
+              "refId": "D",
+              "expr": "time() - max(dbscheduler_task_last_run_timestamp_seconds{namespace=\"dependency-track\",task=\"OSV Mirror\"} > 0) or vector(0)",
+              "legendFormat": "OSV Mirror",
+              "instant": true
             }
           ],
           "fieldConfig": {
             "defaults": {
               "unit": "s",
+              "noValue": "Not run yet",
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {"0": {"text": "Not run yet", "color": "blue"}}
+                }
+              ],
               "color": {"mode": "thresholds"},
               "thresholds": {
                 "mode": "absolute",
@@ -73,7 +100,8 @@ data:
             {
               "refId": "A",
               "expr": "sum by (task) (increase(dbscheduler_task_completions_total{namespace=\"dependency-track\",result=\"failed\",task=~\".* Mirror\"}[24h]))",
-              "legendFormat": "{{task}}"
+              "legendFormat": "{{task}}",
+              "instant": true
             }
           ],
           "fieldConfig": {
