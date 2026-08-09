@@ -141,7 +141,7 @@ spec:
                           summary: Keycloak is producing an elevated number of error logs
                           description: More than 10 error, fatal, or panic log lines were observed in five minutes.
                           logs_query: '{cluster="homelab", namespace="keycloak"}'
-                      - alert: ApplicationFatalLogDetected
+                      - alert: ApplicationFatalLogEvent
                         expr: |
                           (
                             sum by (namespace, pod, container) (
@@ -151,12 +151,12 @@ spec:
                           ) > 0
                         for: 1m
                         labels:
-                          severity: critical
+                          severity: warning
                           category: logs
+                          notification_type: event
                         annotations:
                           summary: Fatal application log detected
-                          description: 'Loki detected {{`{{`}} printf "%.0f" $value {{`}}`}} fatal, panic, or out-of-memory log messages in the last 5 minutes.'
-                          resolved_description: No fatal, panic, or out-of-memory log messages are currently being detected.
+                          description: 'Fatal, panic, or out-of-memory log matches in the last 5 minutes: {{`{{`}} printf "%.0f" $value {{`}}`}}.'
                           impact: The application process may have crashed or become unavailable.
                           action: Review surrounding logs to identify the first error preceding the fatal message.
                           logs_query: >-

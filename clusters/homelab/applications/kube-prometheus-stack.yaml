@@ -16,6 +16,56 @@ spec:
         crds:
           enabled: true
         alertmanager:
+          templateFiles:
+            telegram.tmpl: |-
+              {{- define "telegram.homelab.message" -}}
+              {{ if eq .CommonLabels.notification_type "event" }}🟠 <b>EVENT -
+              {{- else }}
+              {{- if eq .Status "firing" }}
+              {{- if eq .CommonLabels.severity "critical" }}🔴
+              {{- else if eq .CommonLabels.severity "warning" }}🟠
+              {{- else }}ℹ️{{ end }}
+              {{- else }}🟢{{ end }} <b>{{ .Status | toUpper | html }} -
+              {{- end }}
+              {{- if .CommonAnnotations.summary }} {{ .CommonAnnotations.summary | html }}
+              {{- else }} {{ .CommonLabels.alertname | html }}{{ end }}</b>
+
+              {{ if .CommonLabels.severity }}Severity: {{ .CommonLabels.severity | toUpper | html }}{{ end }}
+              {{ range .Alerts }}{{ if or .Labels.cluster .Labels.namespace }}<b>Where:</b>
+              {{- with .Labels.cluster }} {{ . | html }}{{ end }}
+              {{- if and .Labels.cluster .Labels.namespace }} / {{ end }}
+              {{- with .Labels.namespace }}{{ . | html }}{{ end }}
+              {{- end }}{{ if or .Labels.pod .Labels.container }}
+              <b>Workload:</b>{{ with .Labels.pod }} {{ . | html }}{{ end }}
+              {{- if and .Labels.pod .Labels.container }} / {{ end }}
+              {{- with .Labels.container }}{{ . | html }}{{ end }}{{ end }}
+
+              <b>What:</b>
+              {{ if eq .Status "firing" }}
+              {{- if .Annotations.description }}{{ .Annotations.description | html }}
+              {{- else }}The alert condition is active.{{ end }}
+              {{- else }}
+              {{- if .Annotations.resolved_description }}{{ .Annotations.resolved_description | html }}
+              {{- else }}The alert condition is no longer active.{{ end }}
+              {{- end }}{{ if and (eq .Status "firing") .Annotations.impact }}
+
+              <b>Possible impact:</b>
+              {{ .Annotations.impact | html }}{{ end }}{{ if and (eq .Status "firing") .Annotations.action }}
+
+              <b>Next step:</b>
+              {{ .Annotations.action | html }}{{ end }}
+              {{- if or .Annotations.logs_query .GeneratorURL .Annotations.runbook_url }}
+
+              {{ if .Annotations.logs_query }}
+              {{- $pane := printf `{"alert":{"datasource":"loki","queries":[{"refId":"A","expr":%q,` .Annotations.logs_query }}
+              {{- $pane = printf `%s"queryType":"range","datasource":{"type":"loki","uid":"loki"}}],` $pane }}
+              {{- $pane = printf `%s"range":{"from":"now-1h","to":"now"}}}` $pane }}
+              🔎 <a href="https://grafana.mmlinaric.com/explore?panes={{ $pane | urlquery }}&amp;schemaVersion=1&amp;orgId=1">Open affected logs</a>
+              {{- else if .GeneratorURL }}🔎 <a href="{{ .GeneratorURL | html }}">Open alert source</a>{{ end }}
+              {{- if .Annotations.runbook_url }}
+              📖 <a href="{{ .Annotations.runbook_url | html }}">Open runbook</a>{{ end }}{{ end }}
+              {{ end }}
+              {{- end -}}
           config:
             global:
               resolve_timeout: 5m
@@ -29,6 +79,9 @@ spec:
                 - receiver: "null"
                   matchers:
                     - alertname =~ "Watchdog|InfoInhibitor"
+                - receiver: telegram-events
+                  matchers:
+                    - notification_type = "event"
             receivers:
               - name: telegram
                 telegram_configs:
@@ -36,50 +89,14 @@ spec:
                     chat_id_file: /etc/alertmanager/secrets/alertmanager-telegram/chat-id
                     send_resolved: true
                     parse_mode: HTML
-                    message: |-
-                      {{ if eq .Status "firing" }}
-                      {{- if eq .CommonLabels.severity "critical" }}🔴
-                      {{- else if eq .CommonLabels.severity "warning" }}🟠
-                      {{- else }}ℹ️{{ end }}
-                      {{- else }}🟢{{ end }} <b>{{ .Status | toUpper | html }} -
-                      {{- if .CommonAnnotations.summary }} {{ .CommonAnnotations.summary | html }}
-                      {{- else }} {{ .CommonLabels.alertname | html }}{{ end }}</b>
-
-                      {{ if .CommonLabels.severity }}Severity: {{ .CommonLabels.severity | toUpper | html }}{{ end }}
-                      {{ range .Alerts }}{{ if or .Labels.cluster .Labels.namespace }}<b>Where:</b>
-                      {{- with .Labels.cluster }} {{ . | html }}{{ end }}
-                      {{- if and .Labels.cluster .Labels.namespace }} / {{ end }}
-                      {{- with .Labels.namespace }}{{ . | html }}{{ end }}
-                      {{- end }}{{ if or .Labels.pod .Labels.container }}
-                      <b>Workload:</b>{{ with .Labels.pod }} {{ . | html }}{{ end }}
-                      {{- if and .Labels.pod .Labels.container }} / {{ end }}
-                      {{- with .Labels.container }}{{ . | html }}{{ end }}{{ end }}
-
-                      <b>What:</b>
-                      {{ if eq .Status "firing" }}
-                      {{- if .Annotations.description }}{{ .Annotations.description | html }}
-                      {{- else }}The alert condition is active.{{ end }}
-                      {{- else }}
-                      {{- if .Annotations.resolved_description }}{{ .Annotations.resolved_description | html }}
-                      {{- else }}The alert condition is no longer active.{{ end }}
-                      {{- end }}{{ if and (eq .Status "firing") .Annotations.impact }}
-
-                      <b>Possible impact:</b>
-                      {{ .Annotations.impact | html }}{{ end }}{{ if and (eq .Status "firing") .Annotations.action }}
-
-                      <b>Next step:</b>
-                      {{ .Annotations.action | html }}{{ end }}
-                      {{- if or .Annotations.logs_query .GeneratorURL .Annotations.runbook_url }}
-
-                      {{ if .Annotations.logs_query }}
-                      {{- $pane := printf `{"alert":{"datasource":"loki","queries":[{"refId":"A","expr":%q,` .Annotations.logs_query }}
-                      {{- $pane = printf `%s"queryType":"range","datasource":{"type":"loki","uid":"loki"}}],` $pane }}
-                      {{- $pane = printf `%s"range":{"from":"now-1h","to":"now"}}}` $pane }}
-                      🔎 <a href="https://grafana.mmlinaric.com/explore?panes={{ $pane | urlquery }}&amp;schemaVersion=1&amp;orgId=1">Open affected logs</a>
-                      {{- else if .GeneratorURL }}🔎 <a href="{{ .GeneratorURL | html }}">Open alert source</a>{{ end }}
-                      {{- if .Annotations.runbook_url }}
-                      📖 <a href="{{ .Annotations.runbook_url | html }}">Open runbook</a>{{ end }}{{ end }}
-                      {{ end }}
+                    message: '{{ template "telegram.homelab.message" . }}'
+              - name: telegram-events
+                telegram_configs:
+                  - bot_token_file: /etc/alertmanager/secrets/alertmanager-telegram/bot-token
+                    chat_id_file: /etc/alertmanager/secrets/alertmanager-telegram/chat-id
+                    send_resolved: false
+                    parse_mode: HTML
+                    message: '{{ template "telegram.homelab.message" . }}'
               - name: "null"
           alertmanagerSpec:
             retention: 120h
