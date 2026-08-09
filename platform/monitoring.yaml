@@ -127,7 +127,9 @@ spec:
           annotations:
             summary: GitLab has no successful Velero backup in the last 30 hours
         - alert: KeycloakLogicalBackupStale
-          expr: (time() - velero_backup_last_successful_timestamp{schedule="keycloak-daily"} > 30 * 3600) or absent(velero_backup_last_successful_timestamp{schedule="keycloak-daily"})
+          expr: >-
+            (time() - velero_backup_last_successful_timestamp{schedule="keycloak-daily"} > 30 * 3600)
+            or absent(velero_backup_last_successful_timestamp{schedule="keycloak-daily"})
           for: 1h
           labels: {severity: critical}
           annotations:

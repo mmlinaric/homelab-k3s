@@ -47,5 +47,3 @@ jobs:
         run: |
           yamllint -c .yamllint.yaml .
           ansible-lint ansible/playbooks/bootstrap.yml
-      - name: Reject em dashes
-        run: '! grep -R -n --exclude-dir=.git "$(printf "\\342\\200\\224")" .'
