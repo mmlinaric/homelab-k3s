@@ -66,6 +66,13 @@ spec:
             cidr: 10.43.0.1/32
       ports:
         - {protocol: TCP, port: 443}
+    # K3s evaluates egress after translating the kubernetes Service to a
+    # control-plane node, so permit API traffic to the cluster node subnet.
+    - to:
+        - ipBlock:
+            cidr: 192.168.70.0/24
+      ports:
+        - {protocol: TCP, port: 6443}
     - to:
         - ipBlock:
             cidr: 192.168.70.100/32
