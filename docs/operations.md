@@ -8,7 +8,7 @@ Renovate opens scheduled pull requests. Review release notes, backup status, com
 
 ## Daily checks
 
-Use Grafana and Telegram alerts for normal monitoring. Investigate any failed or stale Velero backup, K3s snapshot warning, unhealthy Longhorn volume, certificate expiry, or unavailable public probe.
+Use Grafana and Telegram alerts for normal monitoring. Investigate any failed or stale Velero backup, K3s snapshot warning, unhealthy Longhorn volume, certificate expiry, or unavailable endpoint probe. The blackbox exporter checks the LAN-only Jenkins login endpoint from inside the cluster.
 
 Useful commands:
 

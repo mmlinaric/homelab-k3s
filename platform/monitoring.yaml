@@ -115,7 +115,7 @@ spec:
     - name: homelab.backups
       rules:
         - alert: VeleroScheduledBackupFailed
-          expr: velero_backup_last_status{schedule=~"(gitlab|keycloak|dependency-track)-(daily|weekly|monthly)"} != 1
+          expr: velero_backup_last_status{schedule=~"(gitlab|keycloak|dependency-track|jenkins)-(daily|weekly|monthly)"} != 1
           for: 15m
           labels: {severity: critical}
           annotations:
@@ -142,9 +142,20 @@ spec:
           labels: {severity: critical}
           annotations:
             summary: Dependency-Track has no successful encrypted logical backup in the last 30 hours
+        - alert: JenkinsBackupStale
+          expr: >-
+            (time() - velero_backup_last_successful_timestamp{schedule="jenkins-daily"} > 30 * 3600)
+            or absent(velero_backup_last_successful_timestamp{schedule="jenkins-daily"})
+          for: 1h
+          labels: {severity: critical}
+          annotations:
+            summary: Jenkins has no successful off-site backup in the last 30 hours
+            description: The daily Velero transfer of the Jenkins thinBackup staging volume is missing or stale.
+            impact: Recent Jenkins configuration, jobs, and build history may not be recoverable off site.
+            action: Check the latest thinBackup set, Jenkins quiet-mode backup logs, and the jenkins-daily Velero backup.
         - alert: VeleroBackupPartiallyFailed
           expr: >-
-            increase(velero_backup_partial_failure_total{schedule=~"(gitlab|keycloak|dependency-track)-(daily|weekly|monthly)"}[8h]) > 0
+            increase(velero_backup_partial_failure_total{schedule=~"(gitlab|keycloak|dependency-track|jenkins)-(daily|weekly|monthly)"}[8h]) > 0
           for: 15m
           labels: {severity: warning}
           annotations:
