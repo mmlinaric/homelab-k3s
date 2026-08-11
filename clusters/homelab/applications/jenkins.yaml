@@ -50,6 +50,7 @@ spec:
             - configuration-as-code:2117.vc05a_0b_e6b_f4e
             - oic-auth:4.718.ve731df6ca_88a_
             - prometheus:856.vc9e3d6e4b_b_9e
+            - warnings-ng:13.10212.v247e4d8d9430
             - thinBackup:2.1.4
           installLatestPlugins: true
           installLatestSpecifiedPlugins: false
