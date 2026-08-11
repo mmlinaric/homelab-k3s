@@ -181,8 +181,7 @@ spec:
           accessMode: ReadWriteOnce
           size: 20Gi
           labels:
-            backup.homelab/strategy: thinbackup-source
-            velero.io/exclude-from-backup: "true"
+            backup.homelab/strategy: velero
           annotations:
             argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
           volumes:
