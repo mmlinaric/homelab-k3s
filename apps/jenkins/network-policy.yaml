@@ -66,6 +66,13 @@ spec:
             cidr: 10.43.0.1/32
       ports:
         - {protocol: TCP, port: 443}
+    # K3s evaluates egress after translating the kubernetes Service to its
+    # control-plane endpoint, so permit that endpoint as well as the ClusterIP.
+    - to:
+        - ipBlock:
+            cidr: 192.168.70.10/32
+      ports:
+        - {protocol: TCP, port: 6443}
     - to:
         - ipBlock:
             cidr: 192.168.70.100/32
