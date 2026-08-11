@@ -51,7 +51,7 @@ spec:
             - oic-auth:4.715.vf202e4229f61
             - prometheus:856.vc9e3d6e4b_b_9e
             - thinBackup:2.1.4
-          installLatestPlugins: false
+          installLatestPlugins: true
           installLatestSpecifiedPlugins: false
           overwritePlugins: true
           overwritePluginsFromImage: true
@@ -94,10 +94,6 @@ spec:
               loggedInUsersCanDoAnything:
                 allowAnonymousRead: false
             configScripts:
-              jenkins-location: |-
-                unclassified:
-                  location:
-                    url: https://jenkins.mmlinaric.com/
               thin-backup: |-
                 unclassified:
                   thinBackup:
