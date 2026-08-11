@@ -1,0 +1,45 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: jenkins
+  namespace: jenkins
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: homelab.jenkins
+      rules:
+        - alert: JenkinsControllerUnavailable
+          expr: >-
+            kube_statefulset_status_replicas_ready{namespace="jenkins",statefulset="jenkins"} < 1
+            or absent(kube_statefulset_status_replicas_ready{namespace="jenkins",statefulset="jenkins"})
+          for: 10m
+          labels:
+            severity: critical
+            application: jenkins
+          annotations:
+            summary: Jenkins controller is unavailable
+            description: The Jenkins controller has had no ready replica for at least ten minutes.
+            impact: Builds cannot be scheduled or administered.
+            action: Check the Jenkins pod, ExternalSecret, PVC, and recent Argo CD sync events.
+            logs_query: '{cluster="homelab", namespace="jenkins", container="jenkins"}'
+        - alert: JenkinsHomeNearlyFull
+          expr: >-
+            kubelet_volume_stats_used_bytes{namespace="jenkins",persistentvolumeclaim="jenkins"}
+            / kubelet_volume_stats_capacity_bytes{namespace="jenkins",persistentvolumeclaim="jenkins"} > 0.8
+          for: 30m
+          labels:
+            severity: warning
+            application: jenkins
+          annotations:
+            summary: Jenkins home volume is more than 80 percent full
+        - alert: JenkinsBackupStagingNearlyFull
+          expr: >-
+            kubelet_volume_stats_used_bytes{namespace="jenkins",persistentvolumeclaim="jenkins-backups"}
+            / kubelet_volume_stats_capacity_bytes{namespace="jenkins",persistentvolumeclaim="jenkins-backups"} > 0.8
+          for: 30m
+          labels:
+            severity: warning
+            application: jenkins
+          annotations:
+            summary: Jenkins backup staging volume is more than 80 percent full

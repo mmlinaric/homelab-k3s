@@ -1,6 +1,6 @@
 # Homelab K3s
 
-This repository is the declarative replacement for the Docker Compose homelab. It deploys GitLab and Keycloak on a single K3s server today, while keeping a direct path to a three-node cluster later.
+This repository is the declarative replacement for the Docker Compose homelab. It deploys GitLab, Keycloak, Jenkins, and supporting services on a single K3s server today, while keeping a direct path to a three-node cluster later.
 
 ## Architecture
 
@@ -8,7 +8,7 @@ This repository is the declarative replacement for the Docker Compose homelab. I
 Internet -> Cloudflare Tunnel -> Traefik tunnel entrypoint -> public routes
 LAN DNS  -> 192.168.70.100 -> Traefik websecure entrypoint -> all LAN routes
                                       |
-                           GitLab and Keycloak
+                     GitLab, Keycloak, and Jenkins
                                       |
                   Longhorn PVCs, CNPG, and Loki
                                       |
@@ -31,7 +31,7 @@ The first node is `192.168.70.10`. MetalLB assigns `192.168.70.100` to Traefik, 
 | `bootstrap/` | Root Argo CD Application |
 | `clusters/homelab/` | App of apps definitions and pinned Helm releases |
 | `platform/` | Shared networking, certificates, secrets, storage, and monitoring config |
-| `apps/` | GitLab, Keycloak, and Cloudflare Tunnel workloads |
+| `apps/` | GitLab, Keycloak, Jenkins, and other workloads |
 | `recovery/` | Isolated, manually applied disaster recovery overlays |
 | `scripts/` | Local validation and migration export helpers |
 | `docs/` | Bootstrap, secrets, migration, restore, and scaling runbooks |
@@ -56,6 +56,7 @@ The design targets a 24-hour RPO and uses several independent layers:
 | GitLab application data | Native GitLab backup staged on a dedicated PVC, then Velero CSI data movement with Kopia to S3 | Daily, weekly, monthly |
 | Keycloak database | Validated logical dump moved through Velero and Kopia | Daily, weekly, and monthly logical backups |
 | Dependency-Track database | Validated logical dump moved through Velero and Kopia | Daily, weekly, and monthly logical backups |
+| Jenkins controller | Idle thinBackup set moved through Velero and Kopia | Daily, weekly, and monthly backups |
 | Local recovery points | Longhorn snapshots with integrity checks | Daily snapshots, weekly cleanup and integrity check |
 
-Velero is intentionally not used for the live GitLab or Keycloak database volumes. Application-native backups provide the consistency boundary, and Velero moves the GitLab and Keycloak staging PVCs off site. See [docs/backups.md](docs/backups.md) for retention, verification, and recovery details.
+Velero is intentionally not used for the live GitLab, Keycloak database, or Jenkins home volumes. Application-native backups provide the consistency boundary, and Velero moves their staging PVCs off site. See [docs/backups.md](docs/backups.md) for retention, verification, and recovery details.

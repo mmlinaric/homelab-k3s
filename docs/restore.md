@@ -91,6 +91,27 @@ Restore both `dependency-track-backups` and `dependency-track-data` from the sam
 
 Validate the dump checksum and archive with `sha256sum -c` and `pg_restore --list`. For a full drill, create an isolated PostgreSQL 18 cluster with database and owner `dependency-track`, import using `pg_restore --exit-on-error --no-owner --no-acl`, mount the restored data PVC, and start the same or a newer Dependency-Track API server. Confirm `/health/ready` returns `UP`, sign-in works, projects are present, stored integration secrets remain usable, and a test SBOM analysis completes.
 
+## Jenkins restore drill
+
+Restore the latest completed Jenkins staging backup into an isolated namespace:
+
+```bash
+backup_name="$(velero backup get -o json | jq -r '[.items[] | select(.status.phase == "Completed") | select(.metadata.labels["velero.io/schedule-name"] == "jenkins-daily")] | sort_by(.status.completionTimestamp) | last | .metadata.name')"
+kubectl create namespace jenkins-restore
+velero restore create "jenkins-drill-$(date +%s)" \
+  --from-backup "$backup_name" \
+  --include-namespaces jenkins \
+  --namespace-mappings jenkins:jenkins-restore \
+  --include-resources persistentvolumeclaims \
+  --wait
+kubectl -n jenkins-restore get pvc
+kubectl -n velero get datadownload
+```
+
+Mount `jenkins-backups` read-only in an inspector pod and verify that the newest full set contains the global XML configuration, job definitions, and build records expected by the backup policy. Confirm it does not contain workspaces, archived artifacts, `master.key`, or Kubernetes Secret values.
+
+For a full drill, deploy the same pinned Jenkins core and plugin versions in the isolated namespace with OIDC disabled and no network ingress. Restore the selected thinBackup set through the plugin, restart the controller, and verify that jobs, build history, and next build numbers load. Recreate runtime credentials from temporary test secrets rather than using production Bitwarden values. Run a harmless Pipeline on an isolated agent and delete the drill namespace after recording evidence.
+
 ## K3s control-plane restore
 
 Provision an Ubuntu host with the pinned K3s version and retrieve the K3s token and S3 credentials from the offline recovery kit. Kubernetes Secrets are unavailable until etcd has been restored.

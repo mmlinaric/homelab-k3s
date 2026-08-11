@@ -68,6 +68,7 @@ Create one Bitwarden secret per value below. Replace each `CHANGE_ME_BWS_*_ID` i
 | GitLab | existing `gitlab-secrets.json`, OIDC client secret |
 | Velero | Velero S3 access key and secret key, permanent Kopia repository password |
 | Grafana | admin credentials, Keycloak OIDC client secret |
+| Jenkins | Keycloak OIDC client secret, escape-hatch username and password |
 | Alertmanager | Telegram bot token and numeric chat ID |
 | K3s etcd | etcd S3 access key, secret key, bucket name, OVH endpoint host name, OVH region |
 | Argo CD | Keycloak OIDC client secret |
@@ -86,6 +87,14 @@ Generate the Longhorn OAuth2 Proxy cookie secret once and store its Base64 outpu
 ```bash
 openssl rand -base64 32
 ```
+
+Generate the Jenkins OIDC escape-hatch password and keep it only in Bitwarden and the encrypted offline recovery kit:
+
+```bash
+openssl rand -base64 32
+```
+
+Replace the three Jenkins placeholders in `apps/jenkins/secrets.yaml` with the UUIDs of the Jenkins OIDC client secret, escape-hatch username, and escape-hatch password before merging the deployment.
 
 Replace these non-secret placeholders directly in Git:
 
@@ -113,12 +122,15 @@ Create confidential clients in the `homelab` realm:
 | `argocd` | `https://argocd.mmlinaric.com/auth/callback` |
 | `longhorn` | `https://longhorn.mmlinaric.com/oauth2/callback` |
 | `dependency-track` | `https://dependency-track.mmlinaric.com/static/oidc-callback.html` |
+| `jenkins` | `https://jenkins.mmlinaric.com/securityRealm/finishLogin` |
 
 For Grafana, add a client role named `admin` and assign it only to administrators. The default mapped role is Viewer.
 
 For Longhorn, enable client authentication and the standard authorization-code flow, require PKCE with method `S256`, and disable direct access grants. Add a client role named `admin` and assign it only to Longhorn administrators. Add an audience mapper that includes `longhorn` in both the ID and access tokens. OAuth2 Proxy rejects authenticated users who do not have the `longhorn:admin` client role.
 
 For Dependency-Track, use a public client with client authentication disabled, the standard authorization-code flow enabled, direct access grants disabled, and PKCE method `S256`. Set the web origin to `https://dependency-track.mmlinaric.com`. No post-logout redirect URI is required. Add an `admin` client role and assign it to the `homelab-admins` group. Add a User Client Role mapper for the `dependency-track` client that emits a multivalued string claim named `dependency_track_roles` in ID tokens, access tokens, and UserInfo. Dependency-Track maps the `admin` claim value to its Administrators team.
+
+For Jenkins, use a confidential client with client authentication enabled, the standard authorization-code flow enabled, direct access grants disabled, and required PKCE method `S256`. Set the web origin to `https://jenkins.mmlinaric.com`; add both `https://jenkins.mmlinaric.com/` and `https://jenkins.mmlinaric.com/OicLogout` as valid post-logout redirect URIs. Add an `admin` client role assigned to the `homelab-admins` group. Add a User Client Role mapper that emits the Jenkins client roles as the multivalued `jenkins_roles` claim in ID tokens, access tokens, and UserInfo. Jenkins rejects login unless that claim contains `admin`.
 
 ## Offline recovery kit
 
@@ -127,6 +139,7 @@ Keep an encrypted copy outside the cluster and outside Bitwarden. It must contai
 - K3s server token and the K3s S3 endpoint, region, bucket, access key, and secret key
 - Velero S3 credentials and Kopia repository password
 - `gitlab-secrets.json`
+- Jenkins OIDC escape-hatch credentials
 - Bitwarden organization, project, and recovery details
 - the Git repository URL and a read-only deploy credential
 - the pinned K3s, Velero, GitLab, and CNPG versions

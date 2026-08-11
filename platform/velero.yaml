@@ -378,3 +378,60 @@ spec:
                   - /scripts/backup.sh
                 onError: Fail
                 timeout: 1h
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: jenkins-daily
+  namespace: velero
+spec:
+  schedule: "30 0 * * *"
+  template:
+    includedNamespaces: [jenkins]
+    excludedResources: [secrets]
+    labelSelector:
+      matchLabels:
+        backup.homelab/strategy: velero
+    storageLocation: default
+    snapshotVolumes: true
+    snapshotMoveData: true
+    itemOperationTimeout: 4h
+    ttl: 336h
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: jenkins-weekly
+  namespace: velero
+spec:
+  schedule: "30 2 * * 0"
+  template:
+    includedNamespaces: [jenkins]
+    excludedResources: [secrets]
+    labelSelector:
+      matchLabels:
+        backup.homelab/strategy: velero
+    storageLocation: default
+    snapshotVolumes: true
+    snapshotMoveData: true
+    itemOperationTimeout: 4h
+    ttl: 1344h
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: jenkins-monthly
+  namespace: velero
+spec:
+  schedule: "30 8 1 * *"
+  template:
+    includedNamespaces: [jenkins]
+    excludedResources: [secrets]
+    labelSelector:
+      matchLabels:
+        backup.homelab/strategy: velero
+    storageLocation: default
+    snapshotVolumes: true
+    snapshotMoveData: true
+    itemOperationTimeout: 4h
+    ttl: 8784h

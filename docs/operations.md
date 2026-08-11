@@ -8,7 +8,7 @@ Renovate opens scheduled pull requests. Review release notes, backup status, com
 
 ## Daily checks
 
-Use Grafana and Telegram alerts for normal monitoring. Investigate any failed or stale Velero backup, K3s snapshot warning, unhealthy Longhorn volume, certificate expiry, or unavailable public probe.
+Use Grafana and Telegram alerts for normal monitoring. Investigate any failed or stale Velero backup, K3s snapshot warning, unhealthy Longhorn volume, certificate expiry, or unavailable endpoint probe. The blackbox exporter checks the LAN-only Jenkins login endpoint from inside the cluster.
 
 Useful commands:
 
@@ -18,6 +18,7 @@ kubectl get externalsecrets -A
 kubectl -n longhorn-system get volumes.longhorn.io
 kubectl -n velero get backups.velero.io,backuprepositories.velero.io,datauploads.velero.io
 kubectl -n keycloak get cluster
+kubectl -n jenkins get statefulset,pvc
 kubectl get etcdsnapshotfile
 kubectl get certificate -A
 ```
@@ -32,6 +33,7 @@ Useful LogQL queries:
 {cluster="homelab"}
 {cluster="homelab", namespace="gitlab"}
 {cluster="homelab", namespace="keycloak"} |= "error"
+{cluster="homelab", namespace="jenkins"} |= "SEVERE"
 ```
 
 Check the pipeline without exposing Loki outside the cluster:
@@ -75,4 +77,4 @@ done
 sudo k3s etcd-snapshot save --name "manual-$(date +%Y%m%d-%H%M)" --s3
 ```
 
-The GitLab Velero template creates application and configuration archives before snapshotting its staging PVC. The Keycloak Velero template creates and validates a logical dump before snapshotting its staging PVC. Wait for every backup to complete and confirm the off-site objects exist before proceeding. Never treat a `Completed` Kubernetes Job or Backup resource as restore proof. Follow the verification checks in `backups.md`.
+The GitLab Velero template creates application and configuration archives before snapshotting its staging PVC. The Keycloak Velero template creates and validates a logical dump before snapshotting its staging PVC. For Jenkins, first use Manage Jenkins, ThinBackup, Backup Now and confirm a new complete set exists on `jenkins-backups`; then create a manual backup from `jenkins-daily` using the same command pattern. Wait for every backup to complete and confirm the off-site objects exist before proceeding. Never treat a `Completed` Kubernetes Job or Backup resource as restore proof. Follow the verification checks in `backups.md`.

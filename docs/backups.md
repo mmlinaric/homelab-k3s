@@ -8,6 +8,7 @@ The backup system has four independent layers. Each layer has one job and one te
 | GitLab | Native application and configuration archives on `gitlab-backups` PVC | `mmlinaric-homelab-velero`, prefix `homelab` | 14 daily, 8 weekly, 12 monthly restore windows |
 | Keycloak logical | Validated `pg_dump` archive on `keycloak-backups` PVC | `mmlinaric-homelab-velero`, prefix `homelab` | 14 daily, 8 weekly, 12 monthly restore windows |
 | Dependency-Track logical | Validated `pg_dump` archive on `dependency-track-backups` PVC | `mmlinaric-homelab-velero`, prefix `homelab` | 14 daily, 8 weekly, 12 monthly restore windows |
+| Jenkins | Idle thinBackup set on `jenkins-backups` PVC | `mmlinaric-homelab-velero`, prefix `homelab` | 14 daily, 8 weekly, 12 monthly restore windows |
 | Local volumes | Longhorn snapshots | Cluster-local Longhorn storage | 3 daily snapshots plus weekly cleanup |
 
 The weekly and monthly Velero schedules use TTL values of 56 days and 366 days. Their run frequency produces approximately 8 weekly and 12 monthly recovery points per application. Velero stores Kubernetes metadata in S3 and uses Kopia to encrypt and deduplicate moved volume data. OVH managed encryption protects the etcd objects at rest.
@@ -63,6 +64,22 @@ The same Velero recovery point also moves the `dependency-track-data` PVC throug
 
 Restore the database and `dependency-track-data` PVC from the same recovery point into the same or a newer Dependency-Track version. Start one API server after import, wait for its readiness endpoint, and let schema migrations complete before restoring normal replica counts.
 
+## Jenkins consistency boundary
+
+The live `jenkins` PVC carries `backup.homelab/strategy: thinbackup-source` and `velero.io/exclude-from-backup: "true"`. Velero does not move a crash-consistent copy of a busy `JENKINS_HOME`.
+
+The maintained thinBackup plugin waits until Jenkins is idle, enters quiet mode if necessary, and writes a full backup to the separate 20 GiB `jenkins-backups` PVC at 23:00. It retains seven local full sets. Workspaces, archived artifacts, downloaded tools, plugin binaries, and controller keys are excluded; configuration, jobs, build records, and next build numbers are retained. Runtime credentials must remain declarative in Bitwarden and JCasC. Credentials added only through the Jenkins UI are not part of the supported recovery model.
+
+Velero snapshots and moves only the staging PVC after the application backup window:
+
+| Schedule | Cron | TTL |
+| --- | --- | --- |
+| `jenkins-daily` | 00:30 every day | 336h |
+| `jenkins-weekly` | 02:30 Sunday | 1344h |
+| `jenkins-monthly` | 08:30 on day 1 | 8784h |
+
+Before accepting a Jenkins recovery point, confirm that thinBackup created a new complete set before the Velero backup began and that the corresponding DataUpload completed. An older thinBackup set is retained deliberately if a long build prevents the newest scheduled backup from reaching an idle boundary.
+
 ## First backup activation
 
 Generate the Kopia repository password before creating the first backup. Use at least 32 random bytes, store the value in Bitwarden, and place its secret UUID in `CHANGE_ME_BWS_VELERO_REPOSITORY_PASSWORD_ID`. This password must never be rotated after the first repository is created. A different password makes existing Kopia data unreadable.
@@ -98,6 +115,7 @@ Quarterly, perform every applicable restore drill described in `restore.md`. Rec
 - Velero does not replace `gitlab-backup`. The native archive is the application-consistent artifact.
 - Velero does not snapshot the live Keycloak or Dependency-Track databases. It moves validated logical dumps and provides their off-site recovery paths.
 - Velero does not back up embedded etcd. K3s owns control-plane snapshots.
+- Velero does not snapshot the live Jenkins home volume. It moves application-aware thinBackup sets, while Bitwarden and Git hold runtime secrets and declarative configuration.
 - Longhorn snapshots are fast local rollback points. They are not off-site backups.
 - Prometheus history, Alertmanager state, and Grafana local state are disposable. Persist dashboard and alert changes in Git.
 - Git does not contain secret values. Bitwarden availability and the offline recovery kit are part of disaster recovery.

@@ -37,6 +37,14 @@ data:
           "options": {"colorMode": "background", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}}
         },
         {
+          "type": "stat",
+          "title": "Jenkins seconds since successful backup",
+          "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+          "targets": [{"refId": "A", "expr": "time() - velero_backup_last_successful_timestamp{schedule=\"jenkins-daily\"}"}],
+          "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 108000}]}}, "overrides": []},
+          "options": {"colorMode": "background", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}}
+        },
+        {
           "type": "gauge",
           "title": "GitLab backup staging usage",
           "gridPos": {"h": 8, "w": 6, "x": 0, "y": 8},
@@ -92,9 +100,36 @@ data:
           "type": "table",
           "title": "Velero schedule status",
           "gridPos": {"h": 8, "w": 6, "x": 18, "y": 8},
-          "targets": [{"refId": "A", "expr": "velero_backup_last_status{schedule=~\"(gitlab|keycloak)-(daily|weekly|monthly)\"}", "format": "table", "instant": true}],
+          "targets": [{
+            "refId": "A",
+            "expr": "velero_backup_last_status{schedule=~\"(gitlab|keycloak|dependency-track|jenkins)-(daily|weekly|monthly)\"}",
+            "format": "table",
+            "instant": true
+          }],
           "fieldConfig": {"defaults": {}, "overrides": []},
           "options": {"showHeader": true}
+        },
+        {
+          "type": "gauge",
+          "title": "Jenkins backup staging usage",
+          "gridPos": {"h": 8, "w": 6, "x": 0, "y": 16},
+          "targets": [{
+            "refId": "A",
+            "expr": "kubelet_volume_stats_used_bytes{persistentvolumeclaim=\"jenkins-backups\"} / kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=\"jenkins-backups\"}"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green"}, {"color": "yellow", "value": 0.7}, {"color": "red", "value": 0.8}]
+              }
+            },
+            "overrides": []
+          },
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}}
         }
       ],
       "refresh": "1m",

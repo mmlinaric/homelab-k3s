@@ -1,0 +1,210 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: jenkins
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+spec:
+  project: default
+  source:
+    repoURL: https://charts.jenkins.io
+    chart: jenkins
+    targetRevision: 5.9.53
+    helm:
+      valuesObject:
+        controller:
+          image:
+            tag: 2.568.2-jdk21
+            pullPolicy: IfNotPresent
+          numExecutors: 0
+          executorMode: EXCLUSIVE
+          jenkinsUrl: https://jenkins.mmlinaric.com
+          agentListenerEnabled: false
+          disableRememberMe: true
+          javaOpts: -Duser.timezone=Europe/Warsaw
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: 2, memory: 4Gi}
+          initContainerResources:
+            requests: {cpu: 100m, memory: 512Mi}
+            limits: {cpu: 2, memory: 2Gi}
+          podSecurityContextOverride:
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            fsGroupChangePolicy: OnRootMismatch
+            runAsNonRoot: true
+            seccompProfile: {type: RuntimeDefault}
+          containerSecurityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          installPlugins:
+            - kubernetes:4540.v612369217f87
+            - workflow-aggregator:608.v67378e9d3db_1
+            - git:5.10.1
+            - configuration-as-code:2115.vf6de120eef70
+            - oic-auth:4.715.vf202e4229f61
+            - prometheus:856.vc9e3d6e4b_b_9e
+            - thinBackup:2.1.4
+          installLatestPlugins: false
+          installLatestSpecifiedPlugins: false
+          overwritePlugins: true
+          overwritePluginsFromImage: true
+          additionalExistingSecrets:
+            - name: jenkins-runtime
+              keyName: oidc-client-secret
+            - name: jenkins-runtime
+              keyName: escape-hatch-username
+            - name: jenkins-runtime
+              keyName: escape-hatch-password
+          admin:
+            createSecret: false
+          JCasC:
+            defaultConfig: true
+            overwriteConfiguration: true
+            securityRealm: |-
+              oic:
+                clientId: jenkins
+                clientSecret: "${jenkins-runtime-oidc-client-secret}"
+                serverConfiguration:
+                  wellKnown:
+                    wellKnownOpenIDConfigurationUrl: https://auth.mmlinaric.com/realms/homelab/.well-known/openid-configuration
+                    scopesOverride: openid profile email
+                userNameField: preferred_username
+                fullNameFieldName: name
+                emailFieldName: email
+                groupsFieldName: jenkins_roles
+                logoutFromOpenidProvider: true
+                postLogoutRedirectUrl: https://jenkins.mmlinaric.com/
+                allowTokenAccessWithoutOicSession: true
+                tokenFieldToCheckKey: "contains(jenkins_roles, 'admin')"
+                tokenFieldToCheckValue: "true"
+                properties:
+                  - pkce
+                  - escapeHatch:
+                      username: "${jenkins-runtime-escape-hatch-username}"
+                      secret: "${jenkins-runtime-escape-hatch-password}"
+                      group: admin
+            authorizationStrategy: |-
+              loggedInUsersCanDoAnything:
+                allowAnonymousRead: false
+            configScripts:
+              jenkins-location: |-
+                unclassified:
+                  location:
+                    url: https://jenkins.mmlinaric.com/
+              thin-backup: |-
+                unclassified:
+                  thinBackup:
+                    backupAdditionalFiles: false
+                    backupBuildArchive: false
+                    backupBuildResults: true
+                    backupBuildsToKeepOnly: false
+                    backupConfigHistory: false
+                    backupNextBuildNumber: true
+                    backupPath: /var/jenkins_backups
+                    backupPluginArchives: false
+                    backupUserContents: false
+                    cleanupDiff: true
+                    diffBackupSchedule: ""
+                    excludedFilesRegex: ""
+                    failFast: true
+                    forceQuietModeTimeout: 120
+                    fullBackupSchedule: "0 23 * * *"
+                    moveOldBackupsToZipFile: true
+                    nrMaxStoredFull: 7
+                    waitForIdle: true
+          sidecars:
+            configAutoReload:
+              enabled: false
+          prometheus:
+            enabled: true
+            serviceMonitorAdditionalLabels:
+              release: kube-prometheus-stack
+            scrapeInterval: 60s
+            scrapeEndpoint: /prometheus/
+          testEnabled: false
+        agent:
+          enabled: true
+          websocket: true
+          privileged: false
+          runAsUser: 1000
+          runAsGroup: 1000
+          restrictedPssSecurityContext: true
+          podLabels:
+            app.kubernetes.io/instance: jenkins
+            app.kubernetes.io/component: jenkins-agent
+          alwaysPullImage: true
+          podRetention: Never
+          showRawYaml: false
+          containerCap: 2
+          instanceCap: 2
+          idleMinutes: 0
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+              ephemeralStorage: 1Gi
+            limits:
+              cpu: 2
+              memory: 2Gi
+              ephemeralStorage: 5Gi
+          garbageCollection:
+            enabled: true
+            timeout: 300
+          yamlMergeStrategy: merge
+          yamlTemplate: |-
+            apiVersion: v1
+            kind: Pod
+            spec:
+              automountServiceAccountToken: false
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1000
+                runAsGroup: 1000
+                fsGroup: 1000
+                fsGroupChangePolicy: OnRootMismatch
+                seccompProfile:
+                  type: RuntimeDefault
+        persistence:
+          enabled: true
+          storageClass: longhorn
+          accessMode: ReadWriteOnce
+          size: 20Gi
+          labels:
+            backup.homelab/strategy: thinbackup-source
+            velero.io/exclude-from-backup: "true"
+          annotations:
+            argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
+          volumes:
+            - name: jenkins-backups
+              persistentVolumeClaim:
+                claimName: jenkins-backups
+          mounts:
+            - name: jenkins-backups
+              mountPath: /var/jenkins_backups
+        rbac:
+          create: true
+          readSecrets: false
+        serviceAccount:
+          create: true
+          name: jenkins-controller
+          automountServiceAccountToken: true
+        serviceAccountAgent:
+          create: true
+          name: jenkins-agent
+          automountServiceAccountToken: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: jenkins
+  syncPolicy:
+    automated: {enabled: true, prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true, ServerSideApply=true, PruneLast=true]
+    retry:
+      limit: 10
+      backoff: {duration: 10s, factor: 2, maxDuration: 3m}
