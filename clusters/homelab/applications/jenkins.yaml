@@ -171,6 +171,11 @@ spec:
             enabled: true
             timeout: 300
           yamlMergeStrategy: merge
+          volumes:
+            - type: PVC
+              claimName: jenkins-ci-cache
+              mountPath: /cache
+              readOnly: false
           yamlTemplate: |-
             apiVersion: v1
             kind: Pod

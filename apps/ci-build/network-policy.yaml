@@ -1,0 +1,67 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ci-build-default-deny
+  namespace: ci-build
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: buildkit-ingress
+  namespace: ci-build
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: buildkit
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: jenkins
+          podSelector:
+            matchLabels:
+              ci.mmlinaric.com/buildkit-client: "true"
+      ports:
+        - {protocol: TCP, port: 1234}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: buildkit-egress
+  namespace: ci-build
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: buildkit
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - ipBlock:
+            cidr: 192.168.70.100/32
+      ports:
+        - {protocol: TCP, port: 443}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - {protocol: TCP, port: 443}
