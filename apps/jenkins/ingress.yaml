@@ -5,7 +5,7 @@ metadata:
   namespace: jenkins
 spec:
   secretName: jenkins-tls
-  dnsNames: [jenkins.mmlinaric.com]
+  dnsNames: [jenkins.mmlinaric.com, jenkins-resources.mmlinaric.com]
   issuerRef:
     name: letsencrypt-production
     kind: ClusterIssuer
@@ -18,7 +18,7 @@ metadata:
 spec:
   entryPoints: [websecure]
   routes:
-    - match: Host(`jenkins.mmlinaric.com`)
+    - match: Host(`jenkins.mmlinaric.com`) || Host(`jenkins-resources.mmlinaric.com`)
       kind: Rule
       services:
         - {name: jenkins, port: 8080}
