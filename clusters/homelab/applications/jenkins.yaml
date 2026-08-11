@@ -96,6 +96,8 @@ spec:
             configScripts:
               thin-backup: |-
                 unclassified:
+                  resourceRoot:
+                    url: https://jenkins-resources.mmlinaric.com/
                   thinBackup:
                     backupAdditionalFiles: false
                     backupBuildArchive: false
