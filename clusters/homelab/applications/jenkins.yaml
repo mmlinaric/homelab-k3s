@@ -46,11 +46,19 @@ spec:
           installPlugins:
             - kubernetes:4540.v612369217f87
             - workflow-aggregator:608.v67378e9d3db_1
+            - pipeline-graph-view:998.vc30deece0e36
             - git:5.10.1
+            - gitlab-branch-source:743.ve0c8154a_8da_b_
+            - git-forensics:4.2463.vf6fecb_444a_b_3
+            - docker-workflow:647.vf474049b_b_303
+            - junit:1418.v67a_81935603c
+            - coverage:3.3325.v2f3dd167a_b_e5
+            - warnings-ng:13.10212.v247e4d8d9430
+            - credentials-binding:728.v902a_273b_8947
             - configuration-as-code:2117.vc05a_0b_e6b_f4e
             - oic-auth:4.718.ve731df6ca_88a_
+            - matrix-auth:3.3
             - prometheus:856.vc9e3d6e4b_b_9e
-            - warnings-ng:13.10212.v247e4d8d9430
             - thinBackup:2.1.4
           installLatestPlugins: true
           installLatestSpecifiedPlugins: false
