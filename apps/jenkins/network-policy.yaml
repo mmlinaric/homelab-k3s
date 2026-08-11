@@ -120,6 +120,15 @@ spec:
       ports:
         - {protocol: TCP, port: 8080}
     - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ci-build
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: buildkit
+      ports:
+        - {protocol: TCP, port: 1234}
+    - to:
         - ipBlock:
             cidr: 192.168.70.100/32
       ports:

@@ -21,6 +21,8 @@ Velero deploys one node-agent pod per node automatically. Keep data movement con
 - Keep GitLab Omnibus at one replica. Omnibus is stateful and cannot become highly available by changing the StatefulSet replica count. True GitLab HA requires decomposing PostgreSQL, Redis, Gitaly, object storage, and web components.
 - Run two Traefik and Cloudflared replicas with topology spread constraints.
 - Add disruption budgets only after replica counts can satisfy them.
+- Replace the Jenkins `jenkins-ci-cache` ReadWriteOnce claim with an RWX class
+  or per-pod caches before agents can be scheduled across multiple nodes.
 
 ## Validation
 

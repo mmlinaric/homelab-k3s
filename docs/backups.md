@@ -70,6 +70,8 @@ The live `jenkins` PVC carries `backup.homelab/strategy: thinbackup-source` and 
 
 The maintained thinBackup plugin waits until Jenkins is idle, enters quiet mode if necessary, and writes a full backup to the separate 20 GiB `jenkins-backups` PVC at 23:00. It retains seven local full sets. Workspaces, archived artifacts, downloaded tools, plugin binaries, and controller keys are excluded; configuration, jobs, build records, and next build numbers are retained. Runtime credentials must remain declarative in Bitwarden and JCasC. Credentials added only through the Jenkins UI are not part of the supported recovery model.
 
+The `jenkins-ci-cache` and `buildkit-data-buildkit-0` PVCs are rebuildable caches and intentionally carry no Velero backup label.
+
 Velero snapshots and moves only the staging PVC after the application backup window:
 
 | Schedule | Cron | TTL |
