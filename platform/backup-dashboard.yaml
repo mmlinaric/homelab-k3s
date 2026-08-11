@@ -100,7 +100,12 @@ data:
           "type": "table",
           "title": "Velero schedule status",
           "gridPos": {"h": 8, "w": 6, "x": 18, "y": 8},
-          "targets": [{"refId": "A", "expr": "velero_backup_last_status{schedule=~\"(gitlab|keycloak|dependency-track|jenkins)-(daily|weekly|monthly)\"}", "format": "table", "instant": true}],
+          "targets": [{
+            "refId": "A",
+            "expr": "velero_backup_last_status{schedule=~\"(gitlab|keycloak|dependency-track|jenkins)-(daily|weekly|monthly)\"}",
+            "format": "table",
+            "instant": true
+          }],
           "fieldConfig": {"defaults": {}, "overrides": []},
           "options": {"showHeader": true}
         },
