@@ -47,8 +47,8 @@ spec:
             - kubernetes:4540.v612369217f87
             - workflow-aggregator:608.v67378e9d3db_1
             - git:5.10.1
-            - configuration-as-code:2115.vf6de120eef70
-            - oic-auth:4.715.vf202e4229f61
+            - configuration-as-code:2117.vc05a_0b_e6b_f4e
+            - oic-auth:4.718.ve731df6ca_88a_
             - prometheus:856.vc9e3d6e4b_b_9e
             - thinBackup:2.1.4
           installLatestPlugins: true
@@ -71,6 +71,8 @@ spec:
               oic:
                 clientId: jenkins
                 clientSecret: "${jenkins-runtime-oidc-client-secret}"
+                userIdStrategy: caseSensitive
+                groupIdStrategy: caseSensitive
                 serverConfiguration:
                   wellKnown:
                     wellKnownOpenIDConfigurationUrl: https://auth.mmlinaric.com/realms/homelab/.well-known/openid-configuration
@@ -94,6 +96,10 @@ spec:
               loggedInUsersCanDoAnything:
                 allowAnonymousRead: false
             configScripts:
+              security-settings: |-
+                security:
+                  contentSecurityPolicy:
+                    enforce: true
               thin-backup: |-
                 unclassified:
                   resourceRoot:
