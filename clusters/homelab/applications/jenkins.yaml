@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://charts.jenkins.io
     chart: jenkins
-    targetRevision: 5.9.53
+    targetRevision: 5.9.54
     helm:
       valuesObject:
         controller:
