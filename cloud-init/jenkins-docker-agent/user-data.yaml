@@ -1,0 +1,47 @@
+#cloud-config
+hostname: jenkins-agent-01
+manage_etc_hosts: true
+package_update: true
+package_upgrade: true
+groups:
+  - docker
+users:
+  - default
+  - name: jenkins
+    gecos: Jenkins Docker build agent
+    lock_passwd: true
+    shell: /bin/bash
+    groups: [docker]
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGEfS6VPgNfmYK1Mxop//vQuX/eHMQ2Wo1tX+2wOfEdh jenkins-agent@jenkins-agent-01
+packages:
+  - ca-certificates
+  - curl
+  - docker-buildx
+  - docker-compose-v2
+  - docker.io
+  - git
+  - openjdk-21-jre-headless
+write_files:
+  - path: /etc/docker/daemon.json
+    permissions: "0644"
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {"max-size": "10m", "max-file": "3"}
+      }
+  - path: /etc/ssh/sshd_config.d/60-jenkins-agent.conf
+    permissions: "0644"
+    content: |
+      PasswordAuthentication no
+      PermitRootLogin no
+      PubkeyAuthentication yes
+runcmd:
+  - [install, -d, -o, jenkins, -g, jenkins, -m, "0750", /var/lib/jenkins-agent]
+  - [install, -d, -o, jenkins, -g, jenkins, -m, "2775", /var/cache/jenkins-ci]
+  - [install, -d, -o, jenkins, -g, jenkins, -m, "2775", /var/cache/jenkins-ci/maven]
+  - [install, -d, -o, jenkins, -g, jenkins, -m, "2775", /var/cache/jenkins-ci/npm]
+  - [install, -d, -o, jenkins, -g, jenkins, -m, "2775", /var/cache/jenkins-ci/trivy]
+  - [systemctl, enable, --now, docker]
+  - [systemctl, restart, ssh]
+final_message: Jenkins Docker agent provisioning completed after $UPTIME seconds

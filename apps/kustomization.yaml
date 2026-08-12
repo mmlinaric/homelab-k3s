@@ -6,5 +6,4 @@ resources:
   - cloudflared
   - portfolio
   - dependency-track
-  - ci-build
   - jenkins
