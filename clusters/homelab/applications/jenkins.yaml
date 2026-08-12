@@ -44,7 +44,7 @@ spec:
             allowPrivilegeEscalation: false
             capabilities: {drop: [ALL]}
           installPlugins:
-            - kubernetes:4540.v612369217f87
+            - ssh-slaves:3.1097.v868116049892
             - workflow-aggregator:608.v67378e9d3db_1
             - pipeline-graph-view:998.vc30deece0e36
             - git:5.10.1
@@ -71,6 +71,8 @@ spec:
               keyName: escape-hatch-username
             - name: jenkins-runtime
               keyName: escape-hatch-password
+            - name: jenkins-runtime
+              keyName: docker-agent-ssh-private-key
           admin:
             createSecret: false
           JCasC:
@@ -105,6 +107,40 @@ spec:
               loggedInUsersCanDoAnything:
                 allowAnonymousRead: false
             configScripts:
+              docker-agent-credentials: |-
+                credentials:
+                  system:
+                    domainCredentials:
+                      - credentials:
+                          - basicSSHUserPrivateKey:
+                              scope: SYSTEM
+                              id: jenkins-docker-agent-ssh
+                              description: SSH key for the dedicated Docker build agent
+                              username: jenkins
+                              privateKeySource:
+                                directEntry:
+                                  privateKey: "${jenkins-runtime-docker-agent-ssh-private-key}"
+              docker-agent-node: |-
+                jenkins:
+                  nodes:
+                    - permanent:
+                        name: docker-agent
+                        labelString: docker-agent
+                        mode: EXCLUSIVE
+                        numExecutors: 1
+                        remoteFS: /var/lib/jenkins-agent
+                        launcher:
+                          SSH:
+                            host: 192.168.60.104
+                            port: 22
+                            credentialsId: jenkins-docker-agent-ssh
+                            javaPath: /usr/bin/java
+                            launchTimeoutSeconds: 60
+                            maxNumRetries: 10
+                            retryWaitTime: 15
+                            sshHostKeyVerificationStrategy:
+                              manuallyTrustedKeyVerificationStrategy:
+                                requireInitialManualTrust: true
               security-settings: |-
                 security:
                   contentSecurityPolicy:
@@ -143,52 +179,7 @@ spec:
             scrapeEndpoint: /prometheus/
           testEnabled: false
         agent:
-          enabled: true
-          websocket: true
-          privileged: false
-          runAsUser: 1000
-          runAsGroup: 1000
-          restrictedPssSecurityContext: true
-          podLabels:
-            app.kubernetes.io/instance: jenkins
-            app.kubernetes.io/component: jenkins-agent
-          alwaysPullImage: true
-          podRetention: Never
-          showRawYaml: false
-          containerCap: 1
-          instanceCap: 1
-          idleMinutes: 0
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-              ephemeralStorage: 1Gi
-            limits:
-              cpu: 2
-              memory: 2Gi
-              ephemeralStorage: 5Gi
-          garbageCollection:
-            enabled: true
-            timeout: 300
-          yamlMergeStrategy: merge
-          volumes:
-            - type: PVC
-              claimName: jenkins-ci-cache
-              mountPath: /cache
-              readOnly: false
-          yamlTemplate: |-
-            apiVersion: v1
-            kind: Pod
-            spec:
-              automountServiceAccountToken: false
-              securityContext:
-                runAsNonRoot: true
-                runAsUser: 1000
-                runAsGroup: 1000
-                fsGroup: 1000
-                fsGroupChangePolicy: OnRootMismatch
-                seccompProfile:
-                  type: RuntimeDefault
+          enabled: false
         persistence:
           enabled: true
           storageClass: longhorn
@@ -213,7 +204,7 @@ spec:
           name: jenkins-controller
           automountServiceAccountToken: true
         serviceAccountAgent:
-          create: true
+          create: false
           name: jenkins-agent
           automountServiceAccountToken: false
   destination:

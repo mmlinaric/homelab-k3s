@@ -43,13 +43,3 @@ spec:
             application: jenkins
           annotations:
             summary: Jenkins backup staging volume is more than 80 percent full
-        - alert: JenkinsCICacheNearlyFull
-          expr: >-
-            kubelet_volume_stats_used_bytes{namespace="jenkins",persistentvolumeclaim="jenkins-ci-cache"}
-            / kubelet_volume_stats_capacity_bytes{namespace="jenkins",persistentvolumeclaim="jenkins-ci-cache"} > 0.8
-          for: 30m
-          labels:
-            severity: warning
-            application: jenkins
-          annotations:
-            summary: Jenkins CI cache volume is more than 80 percent full
