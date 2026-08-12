@@ -118,19 +118,6 @@ spec:
                 unclassified:
                   location:
                     url: https://jenkins.mmlinaric.com
-              docker-agent-credentials: |-
-                credentials:
-                  system:
-                    domainCredentials:
-                      - credentials:
-                          - basicSSHUserPrivateKey:
-                              scope: SYSTEM
-                              id: jenkins-docker-agent-ssh
-                              description: SSH key for the dedicated Docker build agent
-                              username: jenkins
-                              privateKeySource:
-                                directEntry:
-                                  privateKey: "${jenkins-runtime-docker-agent-ssh-private-key}"
               docker-agent-node: |-
                 jenkins:
                   nodes:
