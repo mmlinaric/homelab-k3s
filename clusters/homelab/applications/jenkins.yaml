@@ -76,37 +76,48 @@ spec:
           admin:
             createSecret: false
           JCasC:
-            defaultConfig: true
+            # The chart's default configuration always creates a Kubernetes cloud.
+            # Jenkins no longer installs the Kubernetes plugin, so provide the
+            # required controller configuration explicitly instead.
+            defaultConfig: false
             overwriteConfiguration: true
-            securityRealm: |-
-              oic:
-                clientId: jenkins
-                clientSecret: "${jenkins-runtime-oidc-client-secret}"
-                userIdStrategy: caseSensitive
-                groupIdStrategy: caseSensitive
-                serverConfiguration:
-                  wellKnown:
-                    wellKnownOpenIDConfigurationUrl: https://auth.mmlinaric.com/realms/homelab/.well-known/openid-configuration
-                    scopesOverride: openid profile email
-                userNameField: preferred_username
-                fullNameFieldName: name
-                emailFieldName: email
-                groupsFieldName: jenkins_roles
-                logoutFromOpenidProvider: true
-                postLogoutRedirectUrl: https://jenkins.mmlinaric.com/
-                allowTokenAccessWithoutOicSession: true
-                tokenFieldToCheckKey: "contains(jenkins_roles, 'admin')"
-                tokenFieldToCheckValue: "true"
-                properties:
-                  - pkce
-                  - escapeHatch:
-                      username: "${jenkins-runtime-escape-hatch-username}"
-                      secret: "${jenkins-runtime-escape-hatch-password}"
-                      group: admin
-            authorizationStrategy: |-
-              loggedInUsersCanDoAnything:
-                allowAnonymousRead: false
             configScripts:
+              controller: |-
+                jenkins:
+                  authorizationStrategy:
+                    loggedInUsersCanDoAnything:
+                      allowAnonymousRead: false
+                  securityRealm:
+                    oic:
+                      clientId: jenkins
+                      clientSecret: "${jenkins-runtime-oidc-client-secret}"
+                      userIdStrategy: caseSensitive
+                      groupIdStrategy: caseSensitive
+                      serverConfiguration:
+                        wellKnown:
+                          wellKnownOpenIDConfigurationUrl: https://auth.mmlinaric.com/realms/homelab/.well-known/openid-configuration
+                          scopesOverride: openid profile email
+                      userNameField: preferred_username
+                      fullNameFieldName: name
+                      emailFieldName: email
+                      groupsFieldName: jenkins_roles
+                      logoutFromOpenidProvider: true
+                      postLogoutRedirectUrl: https://jenkins.mmlinaric.com/
+                      allowTokenAccessWithoutOicSession: true
+                      tokenFieldToCheckKey: "contains(jenkins_roles, 'admin')"
+                      tokenFieldToCheckValue: "true"
+                      properties:
+                        - pkce
+                        - escapeHatch:
+                            username: "${jenkins-runtime-escape-hatch-username}"
+                            secret: "${jenkins-runtime-escape-hatch-password}"
+                            group: admin
+                  disableRememberMe: true
+                  mode: EXCLUSIVE
+                  numExecutors: 0
+                unclassified:
+                  location:
+                    url: https://jenkins.mmlinaric.com
               docker-agent-credentials: |-
                 credentials:
                   system:
