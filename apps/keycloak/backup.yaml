@@ -80,7 +80,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: postgres-client
-          image: ghcr.io/cloudnative-pg/postgresql:18.4-standard-trixie
+          image: ghcr.io/cloudnative-pg/postgresql:18.6-standard-trixie
           command: [sh, -c, "trap 'exit 0' TERM INT; sleep infinity & wait"]
           env:
             - name: PGHOST
