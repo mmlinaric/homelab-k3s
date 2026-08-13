@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://grafana-community.github.io/helm-charts
     chart: loki
-    targetRevision: 18.7.6
+    targetRevision: 18.8.0
     helm:
       valuesObject:
         deploymentMode: Monolithic
