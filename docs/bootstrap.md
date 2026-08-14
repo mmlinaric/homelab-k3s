@@ -45,7 +45,7 @@ All Argo CD Applications should become Healthy and Synced. Some workloads will r
 
 ## Network setup
 
-Create split DNS records on the LAN for `auth`, `gitlab`, `registry`, `grafana`, `argocd`, `longhorn`, and `jenkins` under `mmlinaric.com`, all pointing to `192.168.70.100`. Keep the public records attached to the Cloudflare Tunnel only for `auth`, `gitlab`, and `registry`.
+Create split DNS records on the LAN for `auth`, `git`, `gitlab`, `registry`, `grafana`, `argocd`, `longhorn`, and `jenkins` under `mmlinaric.com`, all pointing to `192.168.70.100`. Keep the public records attached to the Cloudflare Tunnel only for `auth`, `git`, `gitlab`, and `registry`.
 
 Test before changing shared DNS by adding the names to a workstation hosts file with `192.168.70.100`.
 

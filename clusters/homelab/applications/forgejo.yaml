@@ -1,0 +1,196 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+spec:
+  project: default
+  source:
+    repoURL: code.forgejo.org/forgejo-helm
+    chart: forgejo
+    targetRevision: 17.1.4
+    helm:
+      releaseName: forgejo
+      valuesObject:
+        replicaCount: 1
+        strategy:
+          type: Recreate
+        image:
+          tag: 15.0.6-rootless
+          rootless: true
+          pullPolicy: IfNotPresent
+        podSecurityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          fsGroup: 1000
+          fsGroupChangePolicy: OnRootMismatch
+          seccompProfile: {type: RuntimeDefault}
+        containerSecurityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: [ALL]}
+        serviceAccount:
+          create: true
+          automountServiceAccountToken: false
+        service:
+          http:
+            type: ClusterIP
+            port: 3000
+          ssh:
+            type: ClusterIP
+            port: 22
+        ingress:
+          enabled: false
+        test:
+          enabled: false
+        persistence:
+          enabled: true
+          create: true
+          claimName: forgejo-data
+          storageClass: longhorn
+          accessModes: [ReadWriteOnce]
+          size: 50Gi
+          labels:
+            backup.homelab/strategy: velero
+          annotations:
+            argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
+        extraVolumes:
+          - name: database-credentials
+            secret:
+              secretName: forgejo-database
+        extraInitVolumeMounts:
+          - name: database-credentials
+            mountPath: /run/secrets/database
+            readOnly: true
+        extraContainerVolumeMounts:
+          - name: database-credentials
+            mountPath: /run/secrets/database
+            readOnly: true
+        resources:
+          requests: {cpu: 250m, memory: 512Mi}
+          limits: {cpu: 2, memory: 2Gi}
+        initContainers:
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 1, memory: 512Mi}
+        deployment:
+          terminationGracePeriodSeconds: 120
+          labels:
+            app.kubernetes.io/part-of: forgejo
+        gitea:
+          admin:
+            existingSecret: forgejo-admin
+            email: forgejo-admin@mmlinaric.com
+            passwordMode: initialOnlyNoReset
+          oauth:
+            - name: Keycloak
+              provider: openidConnect
+              existingSecret: forgejo-oidc
+              autoDiscoverUrl: https://auth.mmlinaric.com/realms/homelab/.well-known/openid-configuration
+              scopes: openid email profile
+              groupClaimName: forgejo_roles
+              requiredClaimName: forgejo_roles
+              requiredClaimValue: user
+              adminGroup: admin
+              skipLocal-2fa: true
+          metrics:
+            enabled: true
+            serviceMonitor:
+              enabled: true
+              additionalLabels:
+                release: kube-prometheus-stack
+          config:
+            APP_NAME: Mlinaric Forgejo
+            RUN_MODE: prod
+            server:
+              DOMAIN: git.mmlinaric.com
+              ROOT_URL: https://git.mmlinaric.com/
+              PROTOCOL: http
+              HTTP_PORT: 3000
+              DISABLE_SSH: true
+              START_SSH_SERVER: false
+              LFS_START_SERVER: true
+              OFFLINE_MODE: true
+              LANDING_PAGE: explore
+            database:
+              DB_TYPE: postgres
+              HOST: forgejo-db-rw:5432
+              NAME: forgejo
+              USER: forgejo
+              PASSWD_URI: file:/run/secrets/database/password
+              SSL_MODE: disable
+              MAX_OPEN_CONNS: 30
+              MAX_IDLE_CONNS: 5
+              CONN_MAX_LIFETIME: 5m
+            repository:
+              DEFAULT_BRANCH: main
+              DEFAULT_PRIVATE: private
+              DEFAULT_PUSH_CREATE_PRIVATE: true
+              DISABLED_REPO_UNITS: repo.packages,repo.actions
+              ENABLE_PUSH_CREATE_USER: false
+              ENABLE_PUSH_CREATE_ORG: false
+            service:
+              DISABLE_REGISTRATION: false
+              ALLOW_ONLY_EXTERNAL_REGISTRATION: true
+              SHOW_REGISTRATION_BUTTON: false
+              REQUIRE_SIGNIN_VIEW: false
+              ENABLE_INTERNAL_SIGNIN: true
+              ENABLE_BASIC_AUTHENTICATION: false
+              DEFAULT_ALLOW_CREATE_ORGANIZATION: false
+              DEFAULT_USER_IS_RESTRICTED: false
+              DEFAULT_USER_VISIBILITY: public
+              DEFAULT_ORG_VISIBILITY: public
+            admin:
+              DISABLE_REGULAR_ORG_CREATION: true
+              EXTERNAL_USER_DISABLE_FEATURES: deletion,manage_password
+            oauth2_client:
+              ENABLE_AUTO_REGISTRATION: false
+              OPENID_CONNECT_SCOPES: openid email profile
+              USERNAME: preferred_username
+              UPDATE_AVATAR: true
+              ACCOUNT_LINKING: disabled
+            session:
+              PROVIDER: db
+              COOKIE_SECURE: true
+              SAME_SITE: lax
+            actions:
+              ENABLED: false
+            packages:
+              ENABLED: false
+            api:
+              ENABLE_SWAGGER: false
+            federation:
+              ENABLED: false
+            webhook:
+              ALLOWED_HOST_LIST: external,jenkins.mmlinaric.com
+              SKIP_TLS_VERIFY: false
+            migrations:
+              ALLOWED_DOMAINS: github.com,gitlab.com,gitlab.mmlinaric.com,codeberg.org
+              ALLOW_LOCALNETWORKS: false
+              SKIP_TLS_VERIFY: false
+            security:
+              INSTALL_LOCK: true
+              LOGIN_REMEMBER_DAYS: 0
+            log:
+              MODE: console
+              LEVEL: Info
+            time:
+              DEFAULT_UI_LOCATION: Europe/Zagreb
+            other:
+              SHOW_FOOTER_VERSION: false
+              SHOW_FOOTER_TEMPLATE_LOAD_TIME: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: forgejo
+  syncPolicy:
+    automated: {enabled: true, prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true, ServerSideApply=true, PruneLast=true]
+    retry:
+      limit: 10
+      backoff: {duration: 10s, factor: 2, maxDuration: 3m}

@@ -40,7 +40,7 @@ The K3s endpoint Bitwarden entry must contain only the host name, without `https
 s3.<region-in-lowercase>.io.cloud.ovh.net
 ```
 
-Kopia encrypts GitLab and Keycloak staging-volume data before upload. OVH managed encryption adds storage-side encryption and also covers Velero metadata and K3s snapshots. Do not remove either layer.
+Kopia encrypts GitLab, Forgejo, and Keycloak staging-volume data before upload. OVH managed encryption adds storage-side encryption and also covers Velero metadata and K3s snapshots. Do not remove either layer.
 
 ## Bootstrap values
 
@@ -66,6 +66,7 @@ Create one Bitwarden secret per value below. Replace each `CHANGE_ME_BWS_*_ID` i
 | Cloudflare | API token with DNS edit rights for the zone, tunnel credentials JSON |
 | Keycloak | database credentials, PostgreSQL superuser credentials, bootstrap admin credentials |
 | GitLab | existing `gitlab-secrets.json`, OIDC client secret |
+| Forgejo | database credentials, OIDC client secret, bootstrap administrator credentials |
 | Velero | Velero S3 access key and secret key, permanent Kopia repository password |
 | Grafana | admin credentials, Keycloak OIDC client secret |
 | Jenkins | Keycloak OIDC client secret, escape-hatch username and password |
@@ -118,6 +119,7 @@ Create confidential clients in the `homelab` realm:
 | Client | Redirect URI |
 | --- | --- |
 | `gitlab` | `https://gitlab.mmlinaric.com/users/auth/openid_connect/callback` |
+| `forgejo` | `https://git.mmlinaric.com/user/oauth2/Keycloak/callback` |
 | `grafana` | `https://grafana.mmlinaric.com/login/generic_oauth` |
 | `argocd` | `https://argocd.mmlinaric.com/auth/callback` |
 | `longhorn` | `https://longhorn.mmlinaric.com/oauth2/callback` |
@@ -132,6 +134,10 @@ For Dependency-Track, use a public client with client authentication disabled, t
 
 For Jenkins, use a confidential client with client authentication enabled, the standard authorization-code flow enabled, direct access grants disabled, and required PKCE method `S256`. Set the web origin to `https://jenkins.mmlinaric.com`; add both `https://jenkins.mmlinaric.com/` and `https://jenkins.mmlinaric.com/OicLogout` as valid post-logout redirect URIs. Add an `admin` client role assigned to the `homelab-admins` group. Add a User Client Role mapper that emits the Jenkins client roles as the multivalued `jenkins_roles` claim in ID tokens, access tokens, and UserInfo. Jenkins rejects login unless that claim contains `admin`.
 
+For Forgejo, use a confidential client with client authentication enabled, the standard authorization-code flow enabled, direct access grants disabled, and required PKCE method `S256`. Forgejo 15's OpenID Connect client automatically sends an S256 code challenge and the matching verifier. Set the web origin to `https://git.mmlinaric.com`. Add client roles named `user` and `admin`; make `admin` a composite client role that includes `user`. Assign only `admin` to `homelab-admins`, and assign `user` to every other group permitted to use Forgejo. Add a User Client Role mapper that emits the expanded client roles as the multivalued `forgejo_roles` claim in ID tokens, access tokens, and UserInfo. The mapper claim is not an OAuth scope; Forgejo requests only `openid email profile`. Forgejo rejects login without `user` and grants site administration when `admin` is present. Automatic OIDC registration is disabled: after Keycloak authenticates and authorizes a new user, Forgejo asks them to select their permanent local username without creating a local password. The authentication source does not enable `allow-username-change`, so external users cannot rename themselves later. The local bootstrap administrator remains the recovery path if Keycloak is unavailable.
+
+Replace the five Forgejo placeholders in `apps/forgejo/secrets.yaml` with the Bitwarden UUIDs before enabling the Argo CD application. Generate the database and bootstrap administrator passwords with at least 32 random bytes.
+
 ## Offline recovery kit
 
 Keep an encrypted copy outside the cluster and outside Bitwarden. It must contain:
@@ -139,6 +145,7 @@ Keep an encrypted copy outside the cluster and outside Bitwarden. It must contai
 - K3s server token and the K3s S3 endpoint, region, bucket, access key, and secret key
 - Velero S3 credentials and Kopia repository password
 - `gitlab-secrets.json`
+- Forgejo bootstrap administrator credentials
 - Jenkins OIDC escape-hatch credentials
 - Bitwarden organization, project, and recovery details
 - the Git repository URL and a read-only deploy credential

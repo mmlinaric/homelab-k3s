@@ -12,12 +12,13 @@ Keep an odd number of server nodes. Spread them across independent Proxmox failu
 
 Add a Longhorn disk on each node, verify replica scheduling, then change the default replica count from 1 to 3. Rebuild existing volumes to three healthy replicas before testing a node shutdown. Capacity must cover three copies plus backup and rebuild headroom.
 
-Velero deploys one node-agent pod per node automatically. Keep data movement concurrency at one per node until backup duration and workload impact have been measured. The GitLab and Keycloak staging PVCs remain ReadWriteOnce and move with their owning pods.
+Velero deploys one node-agent pod per node automatically. Keep data movement concurrency at one per node until backup duration and workload impact have been measured. The GitLab, Forgejo, and Keycloak staging PVCs remain ReadWriteOnce and move with their owning pods.
 
 ## Workloads
 
 - Increase Keycloak to at least two instances.
 - Increase CNPG to three instances and verify synchronous replication policy and backups.
+- Keep Forgejo at one replica. The upstream chart warns that multiple Forgejo application replicas can race cron, queue, and cache work. Increase `forgejo-db` to three CNPG instances and rebuild both `forgejo-data` and `forgejo-backups` to three Longhorn replicas. Kubernetes and Longhorn then relocate the single Forgejo pod and its RWO volume after node loss; expect several minutes of downtime while the old attachment is released and the replacement becomes ready.
 - Keep GitLab Omnibus at one replica. Omnibus is stateful and cannot become highly available by changing the StatefulSet replica count. True GitLab HA requires decomposing PostgreSQL, Redis, Gitaly, object storage, and web components.
 - Run two Traefik and Cloudflared replicas with topology spread constraints.
 - Add disruption budgets only after replica counts can satisfy them.
@@ -26,4 +27,4 @@ Velero deploys one node-agent pod per node automatically. Keep data movement con
 
 ## Validation
 
-Cordon and drain one node, then verify login, Git operations, ingress, database health, and Longhorn replica health. Repeat for each node. Finally test an abrupt single-node power loss and confirm etcd retains quorum.
+Cordon and drain one node, then verify login, Git operations, ingress, database health, and Longhorn replica health. Confirm Forgejo relocates and that HTTPS clone and push resume without repository corruption. Repeat for each node. Finally test an abrupt single-node power loss and confirm etcd retains quorum.
