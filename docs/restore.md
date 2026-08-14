@@ -2,7 +2,7 @@
 
 Test restores quarterly and after any backup tooling change. Never test a destructive restore against a production namespace.
 
-The GitLab and Keycloak drills use the optional Velero CLI on the operator workstation. It is not installed on the K3s server by the bootstrap playbook.
+The GitLab, Forgejo, and Keycloak drills use the optional Velero CLI on the operator workstation. It is not installed on the K3s server by the bootstrap playbook.
 
 ## GitLab staging restore drill
 
@@ -44,6 +44,36 @@ gitlab-rake gitlab:doctor:secrets
 ```
 
 Test sign-in, repository browsing, HTTPS clone and push, and registry pull and push.
+
+## Forgejo consistent restore drill
+
+Restore both Forgejo PVCs from one completed backup. They form one recovery point and must never be mixed with PVCs or dumps from another backup.
+
+```bash
+backup_name="$(velero backup get -o json | jq -r '[.items[] | select(.status.phase == "Completed") | select(.metadata.labels["velero.io/schedule-name"] == "forgejo-daily")] | sort_by(.status.completionTimestamp) | last | .metadata.name')"
+kubectl create namespace forgejo-restore
+velero restore create "forgejo-drill-$(date +%s)" \
+  --from-backup "$backup_name" \
+  --include-namespaces forgejo \
+  --namespace-mappings forgejo:forgejo-restore \
+  --include-resources persistentvolumeclaims \
+  --wait
+kubectl -n forgejo-restore get pvc forgejo-data forgejo-backups
+kubectl -n velero get datadownload
+```
+
+Mount the restored volumes read-only and validate the dump and repository tree:
+
+```bash
+kubectl -n forgejo-restore run backup-inspector \
+  --image=ghcr.io/cloudnative-pg/postgresql:18.1-standard-trixie \
+  --restart=Never \
+  --overrides='{"spec":{"securityContext":{"runAsUser":1000,"runAsGroup":1000,"fsGroup":1000},"containers":[{"name":"backup-inspector","image":"ghcr.io/cloudnative-pg/postgresql:18.1-standard-trixie","command":["sleep","3600"],"volumeMounts":[{"name":"backups","mountPath":"/backups","readOnly":true},{"name":"data","mountPath":"/data","readOnly":true}]}],"volumes":[{"name":"backups","persistentVolumeClaim":{"claimName":"forgejo-backups"}},{"name":"data","persistentVolumeClaim":{"claimName":"forgejo-data"}}]}}'
+kubectl -n forgejo-restore wait pod/backup-inspector --for=condition=Ready --timeout=5m
+kubectl -n forgejo-restore exec backup-inspector -- sh -ec 'cd /backups; checksum="$(ls -1t forgejo-*.dump.sha256 | head -1)"; sha256sum -c "$checksum"; pg_restore --list "${checksum%.sha256}" >/dev/null; test -d /data/git/gitea-repositories'
+```
+
+For a full drill, create an isolated PostgreSQL 18 cluster with database and owner `forgejo`, import the validated dump using `pg_restore --exit-on-error --no-owner --no-acl`, and deploy the pinned Forgejo version with the restored `forgejo-data` claim. Use temporary OIDC and administrator credentials, keep the test instance off public ingress, and verify repository browsing, HTTPS clone and push, issues, pull requests, LFS, and `forgejo doctor check --all`. The app-generated signing and encryption material is restored with `forgejo-data`.
 
 ## Keycloak logical restore drill
 
@@ -140,7 +170,7 @@ Reapply the kube-vip manifest if needed, verify the API through `192.168.70.5`, 
 
 ## Longhorn local recovery
 
-Longhorn snapshots are only local recovery points. Use them for a recent rollback while the Longhorn storage system is healthy. Restore a snapshot to a new volume, mount it read-only in a test pod, and validate files before considering any production replacement. They do not replace the off-site GitLab, Keycloak, or etcd restore paths.
+Longhorn snapshots are only local recovery points. Use them for a recent rollback while the Longhorn storage system is healthy. Restore a snapshot to a new volume, mount it read-only in a test pod, and validate files before considering any production replacement. They do not replace the off-site GitLab, Forgejo, Keycloak, or etcd restore paths.
 
 ## Evidence to record
 

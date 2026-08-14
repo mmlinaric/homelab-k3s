@@ -18,6 +18,7 @@ kubectl get externalsecrets -A
 kubectl -n longhorn-system get volumes.longhorn.io
 kubectl -n velero get backups.velero.io,backuprepositories.velero.io,datauploads.velero.io
 kubectl -n keycloak get cluster
+kubectl -n forgejo get deployment,cluster,pvc
 kubectl -n jenkins get statefulset,pvc
 kubectl get etcdsnapshotfile
 kubectl get certificate -A
@@ -33,6 +34,7 @@ Useful LogQL queries:
 {cluster="homelab"}
 {cluster="homelab", namespace="gitlab"}
 {cluster="homelab", namespace="keycloak"} |= "error"
+{cluster="homelab", namespace="forgejo"} |= "error"
 {cluster="homelab", namespace="jenkins"} |= "SEVERE"
 ```
 
@@ -49,7 +51,7 @@ curl -fsS http://127.0.0.1:3100/ready
 
 Retention is enforced by Loki's compactor. Increase both `loki.limits_config.retention_period` and the `singleBinary.persistence.size` value together if seven days consistently approaches the volume capacity.
 
-Logging alerts use two paths. Prometheus evaluates Loki, Alloy, canary, and storage health rules. Loki's ruler evaluates LogQL rules for GitLab and Keycloak error bursts and fatal signatures. Both paths send firing alerts to the existing Alertmanager and Telegram receiver. Keep generic error thresholds conservative; add application-specific signatures only after confirming the exact production log format in Logs Drilldown.
+Logging alerts use two paths. Prometheus evaluates Loki, Alloy, canary, and storage health rules. Loki's ruler evaluates LogQL rules for GitLab, Forgejo, and Keycloak error bursts and fatal signatures. Both paths send firing alerts to the existing Alertmanager and Telegram receiver. Keep generic error thresholds conservative; add application-specific signatures only after confirming the exact production log format in Logs Drilldown.
 
 Longhorn access requires both a client address in the administrator LAN `192.168.88.0/24` and the Keycloak client role `longhorn:admin`. Verify the controls after authentication or network changes:
 
@@ -63,7 +65,7 @@ An unauthenticated LAN request must redirect to Keycloak. A user without `longho
 ## Manual backup before risky work
 
 ```bash
-for schedule in gitlab-daily keycloak-daily; do
+for schedule in gitlab-daily forgejo-daily keycloak-daily; do
   name="${schedule}-manual-$(date +%Y%m%d-%H%M)"
   kubectl -n velero get schedule "$schedule" -o json |
     jq --arg name "$name" '{
@@ -77,4 +79,4 @@ done
 sudo k3s etcd-snapshot save --name "manual-$(date +%Y%m%d-%H%M)" --s3
 ```
 
-The GitLab Velero template creates application and configuration archives before snapshotting its staging PVC. The Keycloak Velero template creates and validates a logical dump before snapshotting its staging PVC. For Jenkins, first use Manage Jenkins, ThinBackup, Backup Now and confirm a new complete set exists on `jenkins-backups`; then create a manual backup from `jenkins-daily` using the same command pattern. Confirm that both the live `jenkins` PVC and `jenkins-backups` PVC produce completed DataUploads. Wait for every backup to complete and confirm the off-site objects exist before proceeding. Never treat a `Completed` Kubernetes Job or Backup resource as restore proof. Follow the verification checks in `backups.md`.
+The GitLab Velero template creates application and configuration archives before snapshotting its staging PVC. The Forgejo template briefly stops Forgejo, validates a PostgreSQL dump, snapshots the repository and staging PVCs, and starts Forgejo again. The Keycloak template creates and validates a logical dump before snapshotting its staging PVC. For Jenkins, first use Manage Jenkins, ThinBackup, Backup Now and confirm a new complete set exists on `jenkins-backups`; then create a manual backup from `jenkins-daily` using the same command pattern. Confirm that both the live `jenkins` PVC and `jenkins-backups` PVC produce completed DataUploads. Wait for every backup to complete and confirm the off-site objects exist before proceeding. Never treat a `Completed` Kubernetes Job or Backup resource as restore proof. Follow the verification checks in `backups.md`.

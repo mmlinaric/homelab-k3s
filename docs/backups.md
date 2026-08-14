@@ -6,6 +6,7 @@ The backup system has four independent layers. Each layer has one job and one te
 | --- | --- | --- | --- |
 | K3s control plane | Encrypted embedded-etcd snapshot | `mmlinaric-homelab-etcd`, prefix `homelab/etcd` | 28 snapshots, about 14 days |
 | GitLab | Native application and configuration archives on `gitlab-backups` PVC | `mmlinaric-homelab-velero`, prefix `homelab` | 14 daily, 8 weekly, 12 monthly restore windows |
+| Forgejo | Quiesced `forgejo-data` snapshot and validated PostgreSQL dump on `forgejo-backups` | `mmlinaric-homelab-velero`, prefix `homelab` | 14 daily, 8 weekly, 12 monthly restore windows |
 | Keycloak logical | Validated `pg_dump` archive on `keycloak-backups` PVC | `mmlinaric-homelab-velero`, prefix `homelab` | 14 daily, 8 weekly, 12 monthly restore windows |
 | Dependency-Track logical | Validated `pg_dump` archive on `dependency-track-backups` PVC | `mmlinaric-homelab-velero`, prefix `homelab` | 14 daily, 8 weekly, 12 monthly restore windows |
 | Jenkins | Crash-consistent `JENKINS_HOME` snapshot plus idle thinBackup set | `mmlinaric-homelab-velero`, prefix `homelab` | 14 daily, 8 weekly, 12 monthly restore windows |
@@ -49,6 +50,22 @@ The live CNPG PVC is not selected by these schedules. Only the backup helper and
 | `keycloak-monthly` | 06:00 on day 1 | 8784h |
 
 Keycloak recovery is limited to the latest successfully completed logical backup. Point-in-time recovery is intentionally unavailable because Barman WAL and physical backups would not have a client-side encryption layer.
+
+## Forgejo consistency boundary
+
+Forgejo stores repositories and application-generated secrets on `forgejo-data` while relational metadata lives in `forgejo-db`. Forgejo does not provide a GitLab-equivalent online backup that guarantees these stores represent one point in time, and upstream warns against relying on the database copy embedded by `forgejo dump`.
+
+Before Velero snapshots either PVC, the hook on `forgejo-backup` scales the Forgejo deployment to zero, waits for the pod to exit, creates a PostgreSQL custom-format dump through the CNPG primary, validates it with `pg_restore --list`, and writes a SHA-256 checksum. With application writes stopped, Velero captures the live `forgejo-data` volume and the matching database dump, then the post-hook immediately restores one Forgejo replica. The off-site Kopia transfer continues independently. A watchdog restores the replica if the hook path leaves Forgejo stopped for more than 30 minutes.
+
+This deliberate interruption normally lasts only through shutdown, dump, and CSI snapshot creation. Blackbox alerting waits five minutes to avoid notifying on a normal short backup window.
+
+| Schedule | Cron | TTL |
+| --- | --- | --- |
+| `forgejo-daily` | 04:00 every day | 336h |
+| `forgejo-weekly` | 06:00 Sunday | 1344h |
+| `forgejo-monthly` | 09:00 on day 1 | 8784h |
+
+Always restore `forgejo-data` and the database dump from the same Velero backup. Do not combine a repository snapshot from one recovery point with a dump from another.
 
 ## Dependency-Track consistency boundary
 
@@ -98,7 +115,7 @@ kubectl -n velero get backups.velero.io
 kubectl -n velero get datauploads.velero.io
 ```
 
-Do not proceed until both backups are `Completed`, their hooks show zero failures, their DataUploads are complete, and new objects are visible in `mmlinaric-homelab-velero`.
+Do not proceed until the initial backups are `Completed`, their hooks show zero failures, their DataUploads are complete, and new objects are visible in `mmlinaric-homelab-velero`.
 
 ## Routine verification
 
@@ -117,6 +134,7 @@ Quarterly, perform every applicable restore drill described in `restore.md`. Rec
 ## Failure boundaries
 
 - Velero does not replace `gitlab-backup`. The native archive is the application-consistent artifact.
+- Velero snapshots Forgejo repositories only while Forgejo is stopped and pairs that snapshot with a validated PostgreSQL dump.
 - Velero does not snapshot the live Keycloak or Dependency-Track databases. It moves validated logical dumps and provides their off-site recovery paths.
 - Velero does not back up embedded etcd. K3s owns control-plane snapshots.
 - Velero moves both a crash-consistent live Jenkins home and the application-aware thinBackup sets. Prefer the live PVC for exact controller recovery and retain Bitwarden, Git, and thinBackup as independent recovery paths.
