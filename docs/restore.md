@@ -93,7 +93,7 @@ Validate the dump checksum and archive with `sha256sum -c` and `pg_restore --lis
 
 ## Jenkins restore drill
 
-Restore the latest completed Jenkins staging backup into an isolated namespace:
+Restore both Jenkins PVCs from the latest completed backup into an isolated namespace. Never attach the restored live PVC to the production controller:
 
 ```bash
 backup_name="$(velero backup get -o json | jq -r '[.items[] | select(.status.phase == "Completed") | select(.metadata.labels["velero.io/schedule-name"] == "jenkins-daily")] | sort_by(.status.completionTimestamp) | last | .metadata.name')"
@@ -108,9 +108,11 @@ kubectl -n jenkins-restore get pvc
 kubectl -n velero get datadownload
 ```
 
-Mount `jenkins-backups` read-only in an inspector pod and verify that the newest full set contains the global XML configuration, job definitions, and build records expected by the backup policy. Confirm it does not contain workspaces, archived artifacts, `master.key`, or Kubernetes Secret values.
+Confirm that both `jenkins` and `jenkins-backups` are bound and that their DataDownloads completed. Mount `jenkins-backups` read-only in an inspector pod and verify that the newest full set contains the global XML configuration, job definitions, and build records expected by the backup policy. Confirm the thinBackup set does not contain workspaces, archived artifacts, `master.key`, or Kubernetes Secret values.
 
-For a full drill, deploy the same pinned Jenkins core and plugin versions in the isolated namespace with OIDC disabled and no network ingress. Restore the selected thinBackup set through the plugin, restart the controller, and verify that jobs, build history, and next build numbers load. Recreate runtime credentials from temporary test secrets rather than using production Bitwarden values. Run a harmless Pipeline on an isolated agent and delete the drill namespace after recording evidence.
+For the primary full-controller drill, deploy the same pinned Jenkins core and plugin versions in the isolated namespace with OIDC disabled, no external integrations, and no network ingress. Mount the restored live `jenkins` PVC as `JENKINS_HOME`; verify that Jenkins starts cleanly and that jobs, build history, plugin configuration, credential IDs, and next build numbers load. Do not test production credentials or allow restored jobs to contact production systems.
+
+Also test the independent thinBackup path using a new empty Jenkins home. Restore the selected thinBackup set through the plugin, restart the controller, verify the retained configuration and build records, and recreate credentials from temporary test secrets. Run a harmless Pipeline on an isolated agent and delete the drill namespace after recording evidence.
 
 ## K3s control-plane restore
 

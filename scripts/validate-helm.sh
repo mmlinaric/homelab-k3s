@@ -42,7 +42,7 @@ render_application monitoring prometheus-community/kube-prometheus-stack 88.2.0 
 render_application blackbox prometheus-community/prometheus-blackbox-exporter 11.17.2 monitoring clusters/homelab/applications/blackbox-exporter.yaml
 render_application loki grafana-community/loki 18.7.6 monitoring clusters/homelab/applications/loki.yaml
 render_application alloy grafana/alloy 1.11.1 monitoring clusters/homelab/applications/alloy.yaml
-render_application jenkins jenkins/jenkins 5.9.53 jenkins clusters/homelab/applications/jenkins.yaml
+render_application jenkins jenkins/jenkins 5.9.54 jenkins clusters/homelab/applications/jenkins.yaml
 
 helm template argocd argo/argo-cd \
   --version 10.3.0 \

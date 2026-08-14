@@ -80,7 +80,10 @@ spec:
             # Jenkins no longer installs the Kubernetes plugin, so provide the
             # required controller configuration explicitly instead.
             defaultConfig: false
-            overwriteConfiguration: true
+            # Keep controller and plugin-owned XML that is not managed below.
+            # With this enabled the chart's init container deletes config.xml
+            # and files such as the GitLab Branch Source server configuration.
+            overwriteConfiguration: false
             configScripts:
               controller: |-
                 jenkins:
@@ -143,6 +146,16 @@ spec:
                 security:
                   contentSecurityPolicy:
                     enforce: true
+              gitlab-server: |-
+                unclassified:
+                  gitLabServers:
+                    servers:
+                      - name: gitlab
+                        serverUrl: https://gitlab.mmlinaric.com
+                        credentialsId: gitlab-jenkins-api
+                        manageWebHooks: true
+                        manageSystemHooks: false
+                        immediateHookTrigger: false
               thin-backup: |-
                 unclassified:
                   resourceRoot:
