@@ -18,6 +18,12 @@
       "groupName": "cluster dependencies"
     },
     {
+      "matchManagers": ["argocd"],
+      "matchPackageNames": ["longhorn", "velero"],
+      "minimumReleaseAge": "7 days",
+      "dependencyDashboardApproval": true
+    },
+    {
       "matchPackageNames": ["python", "ansible-core", "ansible-lint", "yamllint"],
       "groupName": "CI Python toolchain"
     },

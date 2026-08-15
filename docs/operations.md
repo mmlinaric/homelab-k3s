@@ -4,7 +4,25 @@
 
 Create a branch, change manifests, run `pwsh ./scripts/validate.ps1`, open a pull request, and merge only after CI passes. Argo CD automatically syncs `main`, prunes removed resources, and self-heals manual changes. Stateful resources carry confirmation annotations to reduce accidental deletion risk.
 
-Renovate opens scheduled pull requests. Review release notes, backup status, compatibility, and rollback steps before merging. Upgrade GitLab only along a supported upgrade path and never skip required stops.
+Renovate opens scheduled pull requests. Review release notes, backup status, compatibility, and rollback steps before merging. Longhorn and Velero releases have a seven-day stabilization delay and require Dependency Dashboard approval. Upgrade GitLab only along a supported upgrade path and never skip required stops.
+
+K3s nodes used by Longhorn must have `multipathd.service` and `multipathd.socket` disabled. Multipath can claim Longhorn's single-path iSCSI devices as device-mapper volumes, causing CSI snapshot clones to fail with `already mounted or mount point busy`. The bootstrap playbook enforces this host prerequisite.
+
+Longhorn is intentionally excluded from automated Argo CD sync. A chart version merge updates the desired version but does not authorize storage maintenance. Before manually syncing Longhorn, confirm that all volumes are healthy and that every backup family has a recent complete recovery point. Keep the pre-upgrade checker enabled.
+
+After the Longhorn manager is healthy on the new version, upgrade V1 volume engines one at a time to the new default engine image. Do not leave manager and volume engine versions mixed. On this single-node cluster, wait for each volume to return to `attached` or `detached` and `healthy` before upgrading the next volume. Confirm there is enough disk headroom for the temporary extra replica used by a live engine upgrade.
+
+Check for engine drift after every Longhorn sync:
+
+```bash
+default_image="$(kubectl -n longhorn-system get setting default-engine-image -o jsonpath='{.value}')"
+kubectl -n longhorn-system get volumes.longhorn.io \
+  -o custom-columns='VOLUME:.metadata.name,DESIRED:.spec.image,CURRENT:.status.currentImage,STATE:.status.state,ROBUSTNESS:.status.robustness'
+kubectl -n longhorn-system get volumes.longhorn.io -o json |
+  jq --arg image "$default_image" -e 'all(.items[]; .spec.image == $image and .status.currentImage == $image)'
+```
+
+Finally, create a Keycloak canary backup and require its Backup and DataUpload resources to complete. Only then retry GitLab, Dependency-Track, and Jenkins one at a time. Treat any partial backup as a failed upgrade validation and stop before upgrading other stateful infrastructure.
 
 ## Daily checks
 

@@ -14,7 +14,7 @@ spec:
     helm:
       valuesObject:
         preUpgradeChecker:
-          jobEnabled: false
+          jobEnabled: true
         persistence:
           defaultClass: true
           defaultClassReplicaCount: 1
@@ -36,7 +36,6 @@ spec:
     server: https://kubernetes.default.svc
     namespace: longhorn-system
   syncPolicy:
-    automated: {enabled: true, prune: true, selfHeal: true}
     syncOptions: [CreateNamespace=true, ServerSideApply=true]
   ignoreDifferences:
     - group: longhorn.io
