@@ -66,7 +66,7 @@ An unauthenticated LAN request must redirect to Keycloak. A user without `longho
 
 Headlamp is available only from the administrator LAN at `https://headlamp.mmlinaric.com`. It uses native Kubernetes OIDC authentication, so authorization is evaluated by the API server rather than by Headlamp's service account.
 
-The Headlamp pod maps `auth.mmlinaric.com` to the LAN Traefik address `192.168.70.100`. This keeps the public Keycloak issuer and certificate identity intact while avoiding public Cloudflare resolution from inside the restricted Headlamp namespace.
+Cluster DNS resolves `auth.mmlinaric.com` through Cloudflare. Headlamp therefore permits public HTTPS egress for OIDC discovery and token exchange while continuing to deny other private-network destinations except the Kubernetes API. The canonical issuer hostname and TLS verification remain unchanged.
 
 Before applying an OIDC configuration change, verify discovery and the issuer from the K3s node:
 

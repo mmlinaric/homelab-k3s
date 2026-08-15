@@ -15,12 +15,6 @@ spec:
       valuesObject:
         fullnameOverride: headlamp
         replicaCount: 1
-        # Cluster DNS resolves the public Cloudflare address for the Keycloak
-        # hostname. Keep TLS/SNI on the canonical issuer while routing the
-        # Headlamp backend to the LAN Traefik address allowed by NetworkPolicy.
-        hostAliases:
-          - ip: 192.168.70.100
-            hostnames: [auth.mmlinaric.com]
         config:
           inCluster: true
           inClusterContextName: homelab

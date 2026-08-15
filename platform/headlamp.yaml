@@ -143,3 +143,16 @@ spec:
             cidr: 192.168.70.100/32
       ports:
         - {protocol: TCP, port: 443}
+    # Keycloak's canonical issuer resolves to Cloudflare from cluster DNS.
+    # Permit public HTTPS while continuing to block all other private ranges.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - {protocol: TCP, port: 443}
