@@ -3,7 +3,6 @@ kind: Kustomization
 resources:
   - keycloak
   - gitlab
-  - forgejo
   - cloudflared
   - portfolio
   - dependency-track

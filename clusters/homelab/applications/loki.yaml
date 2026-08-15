@@ -141,26 +141,11 @@ spec:
                           summary: Keycloak is producing an elevated number of error logs
                           description: More than 10 error, fatal, or panic log lines were observed in five minutes.
                           logs_query: '{cluster="homelab", namespace="keycloak"}'
-                      - alert: ForgejoLogErrorBurst
-                        expr: |
-                          (
-                            sum(count_over_time({cluster="homelab", namespace="forgejo"} |~ `(?i)\b(error|fatal|panic)\b` [5m]))
-                            or on() vector(0)
-                          ) > 10
-                        for: 10m
-                        labels:
-                          severity: warning
-                          category: logs
-                          application: forgejo
-                        annotations:
-                          summary: Forgejo is producing an elevated number of error logs
-                          description: More than 10 error, fatal, or panic log lines were observed in five minutes.
-                          logs_query: '{cluster="homelab", namespace="forgejo"}'
                       - alert: ApplicationFatalLogEvent
                         expr: |
                           (
                             sum by (namespace, pod, container) (
-                              count_over_time({cluster="homelab", namespace=~"gitlab|forgejo|keycloak"} |~ `(?i)\b(fatal|panic|out of memory)\b` [5m])
+                              count_over_time({cluster="homelab", namespace=~"gitlab|keycloak"} |~ `(?i)\b(fatal|panic|out of memory)\b` [5m])
                             )
                             or on() vector(0)
                           ) > 0

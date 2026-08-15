@@ -115,7 +115,7 @@ spec:
     - name: homelab.backups
       rules:
         - alert: VeleroScheduledBackupFailed
-          expr: velero_backup_last_status{schedule=~"(gitlab|forgejo|keycloak|dependency-track|jenkins)-(daily|weekly|monthly)"} != 1
+          expr: velero_backup_last_status{schedule=~"(gitlab|keycloak|dependency-track|jenkins)-(daily|weekly|monthly)"} != 1
           for: 15m
           labels: {severity: critical}
           annotations:
@@ -134,17 +134,6 @@ spec:
           labels: {severity: critical}
           annotations:
             summary: Keycloak has no successful encrypted logical backup in the last 30 hours
-        - alert: ForgejoConsistentBackupStale
-          expr: >-
-            (time() - velero_backup_last_successful_timestamp{schedule="forgejo-daily"} > 30 * 3600)
-            or absent(velero_backup_last_successful_timestamp{schedule="forgejo-daily"})
-          for: 1h
-          labels: {severity: critical}
-          annotations:
-            summary: Forgejo has no successful consistent off-site backup in the last 30 hours
-            description: The coordinated Forgejo repository snapshot and PostgreSQL dump are missing or stale.
-            impact: Recent repositories and Forgejo metadata may not be recoverable to a matched point.
-            action: Check the Forgejo backup coordinator, Velero hooks, and DataUploads.
         - alert: DependencyTrackLogicalBackupStale
           expr: >-
             (time() - velero_backup_last_successful_timestamp{schedule="dependency-track-daily"} > 30 * 3600)
@@ -166,7 +155,7 @@ spec:
             action: Check the latest thinBackup set, Jenkins quiet-mode backup logs, and the jenkins-daily Velero backup.
         - alert: VeleroBackupPartiallyFailed
           expr: >-
-            increase(velero_backup_partial_failure_total{schedule=~"(gitlab|forgejo|keycloak|dependency-track|jenkins)-(daily|weekly|monthly)"}[8h]) > 0
+            increase(velero_backup_partial_failure_total{schedule=~"(gitlab|keycloak|dependency-track|jenkins)-(daily|weekly|monthly)"}[8h]) > 0
           for: 15m
           labels: {severity: warning}
           annotations:
@@ -199,14 +188,6 @@ spec:
           labels: {severity: warning}
           annotations:
             summary: Keycloak backup staging volume is more than 80 percent full
-        - alert: ForgejoBackupStagingNearlyFull
-          expr: >-
-            kubelet_volume_stats_used_bytes{namespace="forgejo",persistentvolumeclaim="forgejo-backups"}
-            / kubelet_volume_stats_capacity_bytes{namespace="forgejo",persistentvolumeclaim="forgejo-backups"} > 0.8
-          for: 30m
-          labels: {severity: warning}
-          annotations:
-            summary: Forgejo backup staging volume is more than 80 percent full
         - alert: DependencyTrackBackupStagingNearlyFull
           expr: >-
             kubelet_volume_stats_used_bytes{namespace="dependency-track",persistentvolumeclaim="dependency-track-backups"}

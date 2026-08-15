@@ -44,13 +44,6 @@ render_application loki grafana-community/loki 18.7.6 monitoring clusters/homela
 render_application alloy grafana/alloy 1.11.1 monitoring clusters/homelab/applications/alloy.yaml
 render_application jenkins jenkins/jenkins 5.9.54 jenkins clusters/homelab/applications/jenkins.yaml
 
-helm template forgejo oci://code.forgejo.org/forgejo-helm/forgejo \
-  --version 17.1.4 \
-  --namespace forgejo \
-  --api-versions monitoring.coreos.com/v1 \
-  --api-versions monitoring.coreos.com/v1/ServiceMonitor \
-  --values <(yq '.spec.source.helm.valuesObject' clusters/homelab/applications/forgejo.yaml) > /dev/null
-
 helm template argocd argo/argo-cd \
   --version 10.3.0 \
   --namespace argocd \
