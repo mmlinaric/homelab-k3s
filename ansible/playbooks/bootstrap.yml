@@ -42,6 +42,19 @@
         enabled: true
         state: started
 
+    - name: Gather host service facts
+      ansible.builtin.service_facts:
+
+    - name: Disable multipath services that can claim Longhorn volumes
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        enabled: false
+        state: stopped
+      loop:
+        - multipathd.service
+        - multipathd.socket
+      when: item in ansible_facts.services
+
     - name: Set the host timezone
       community.general.timezone:
         name: "{{ cluster_timezone }}"
