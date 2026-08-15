@@ -1,6 +1,6 @@
 # Homelab K3s
 
-This repository is the declarative replacement for the Docker Compose homelab. It deploys GitLab, Forgejo, Keycloak, Jenkins, and supporting services on a single K3s server today, while keeping a direct path to a three-node cluster later.
+This repository is the declarative replacement for the Docker Compose homelab. It deploys GitLab, Forgejo, Keycloak, Jenkins, Headlamp, and supporting services on a single K3s server today, while keeping a direct path to a three-node cluster later.
 
 ## Architecture
 

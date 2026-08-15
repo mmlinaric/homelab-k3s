@@ -62,6 +62,34 @@ kubectl -n longhorn-system logs deployment/longhorn-oauth2-proxy
 
 An unauthenticated LAN request must redirect to Keycloak. A user without `longhorn:admin` must receive an authorization failure, while a user with the role must reach the Longhorn UI. A request originating outside `192.168.88.0/24` must receive HTTP 403 before authentication.
 
+## Headlamp access
+
+Headlamp is available only from the administrator LAN at `https://headlamp.mmlinaric.com`. It uses native Kubernetes OIDC authentication, so authorization is evaluated by the API server rather than by Headlamp's service account.
+
+Before applying an OIDC configuration change, verify discovery and the issuer from the K3s node:
+
+```bash
+curl --fail --silent --show-error \
+  https://auth.mmlinaric.com/realms/homelab/.well-known/openid-configuration \
+  | jq -r .issuer
+```
+
+The result must be exactly `https://auth.mmlinaric.com/realms/homelab`. Apply the host configuration with `ansible-playbook playbooks/bootstrap.yml`; its existing handler restarts K3s and waits for the API to return. On this single-node cluster, expect a brief control-plane outage.
+
+Verify the deployment and authorization:
+
+```bash
+kubectl -n argocd get application headlamp
+kubectl -n headlamp get deployment,service,externalsecret,certificate,ingressroute
+kubectl auth can-i --as=system:serviceaccount:headlamp:headlamp '*' '*'
+kubectl auth can-i --as=oidc:headlamp-admin \
+  --as-group=oidc:homelab-admins '*' '*'
+```
+
+The Headlamp service account check must return `no`; the OIDC administrator check must return `yes`. A `homelab-admins` member must be able to sign in and administer resources. An authenticated user outside that group must not be able to read cluster resources, and a request originating outside `192.168.88.0/24` must receive HTTP 403.
+
+If K3s fails to return after enabling OIDC, remove the `kube-apiserver-arg` OIDC entries from `/etc/rancher/k3s/config.yaml`, restart `k3s`, and correct issuer reachability or token claims before retrying. Existing client-certificate kubeconfigs remain the recovery authentication path.
+
 ## Manual backup before risky work
 
 ```bash

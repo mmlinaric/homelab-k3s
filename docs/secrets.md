@@ -74,6 +74,7 @@ Create one Bitwarden secret per value below. Replace each `CHANGE_ME_BWS_*_ID` i
 | K3s etcd | etcd S3 access key, secret key, bucket name, OVH endpoint host name, OVH region |
 | Argo CD | Keycloak OIDC client secret |
 | Longhorn | Keycloak OIDC client secret, OAuth2 Proxy cookie secret |
+| Headlamp | Keycloak OIDC client secret |
 
 Generate the Kopia repository password once, before the first Velero backup:
 
@@ -125,6 +126,7 @@ Create confidential clients in the `homelab` realm:
 | `longhorn` | `https://longhorn.mmlinaric.com/oauth2/callback` |
 | `dependency-track` | `https://dependency-track.mmlinaric.com/static/oidc-callback.html` |
 | `jenkins` | `https://jenkins.mmlinaric.com/securityRealm/finishLogin` |
+| `headlamp` | `https://headlamp.mmlinaric.com/oidc-callback` |
 
 For Grafana, add a client role named `admin` and assign it only to administrators. The default mapped role is Viewer.
 
@@ -133,6 +135,8 @@ For Longhorn, enable client authentication and the standard authorization-code f
 For Dependency-Track, use a public client with client authentication disabled, the standard authorization-code flow enabled, direct access grants disabled, and PKCE method `S256`. Set the web origin to `https://dependency-track.mmlinaric.com`. No post-logout redirect URI is required. Add an `admin` client role and assign it to the `homelab-admins` group. Add a User Client Role mapper for the `dependency-track` client that emits a multivalued string claim named `dependency_track_roles` in ID tokens, access tokens, and UserInfo. Dependency-Track maps the `admin` claim value to its Administrators team.
 
 For Jenkins, use a confidential client with client authentication enabled, the standard authorization-code flow enabled, direct access grants disabled, and required PKCE method `S256`. Set the web origin to `https://jenkins.mmlinaric.com`; add both `https://jenkins.mmlinaric.com/` and `https://jenkins.mmlinaric.com/OicLogout` as valid post-logout redirect URIs. Add an `admin` client role assigned to the `homelab-admins` group. Add a User Client Role mapper that emits the Jenkins client roles as the multivalued `jenkins_roles` claim in ID tokens, access tokens, and UserInfo. Jenkins rejects login unless that claim contains `admin`.
+
+For Headlamp, use a confidential client with client authentication enabled, the standard authorization-code flow enabled, direct access grants disabled, and required PKCE method `S256`. Set the root URL to `https://headlamp.mmlinaric.com`, home URL and valid post-logout redirect URI to `https://headlamp.mmlinaric.com/`, web origin to `https://headlamp.mmlinaric.com`, and leave the admin URL empty. Assign the existing optional `groups` client scope, or add a Group Membership mapper that emits a multivalued `groups` claim in ID tokens, access tokens, and UserInfo with full group paths disabled. A member of `homelab-admins` must receive `groups: ["homelab-admins"]` and an audience containing `headlamp`. Kubernetes prefixes that group as `oidc:homelab-admins` and grants it cluster-admin. Store the client secret in the Bitwarden entry referenced by `platform/headlamp.yaml`.
 
 For Forgejo, use a confidential client with client authentication enabled, the standard authorization-code flow enabled, direct access grants disabled, and required PKCE method `S256`. Forgejo 15's OpenID Connect client automatically sends an S256 code challenge and the matching verifier. Set the web origin to `https://git.mmlinaric.com`. Add client roles named `user` and `admin`; make `admin` a composite client role that includes `user`. Assign only `admin` to `homelab-admins`, and assign `user` to every other group permitted to use Forgejo. Add a User Client Role mapper that emits the expanded client roles as the multivalued `forgejo_roles` claim in ID tokens, access tokens, and UserInfo. The mapper claim is not an OAuth scope; Forgejo requests only `openid email profile`. Forgejo rejects login without `user` and grants site administration when `admin` is present. Automatic OIDC registration is disabled: after Keycloak authenticates and authorizes a new user, Forgejo asks them to select their permanent local username without creating a local password. The authentication source does not enable `allow-username-change`, so external users cannot rename themselves later. The local bootstrap administrator remains the recovery path if Keycloak is unavailable.
 

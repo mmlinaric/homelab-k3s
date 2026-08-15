@@ -9,6 +9,12 @@ k3s_api_port: 6443
 k3s_cluster_cidr: 10.42.0.0/16
 k3s_service_cidr: 10.43.0.0/16
 k3s_interface: ens18
+k3s_oidc_issuer_url: https://auth.mmlinaric.com/realms/homelab
+k3s_oidc_client_id: headlamp
+k3s_oidc_username_claim: preferred_username
+k3s_oidc_username_prefix: "oidc:"
+k3s_oidc_groups_claim: groups
+k3s_oidc_groups_prefix: "oidc:"
 
 argocd_chart_version: 10.3.0
 cert_manager_chart_version: v1.21.1
@@ -18,4 +24,3 @@ gitops_repo_revision: main
 
 bitwarden_organization_id: 4d8e230e-8a58-4810-95ac-b4480149e082
 bitwarden_project_id: 832e95c1-00d7-460f-a5db-b4a00118089a
-
