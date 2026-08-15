@@ -39,13 +39,14 @@ kubectl -n keycloak get cluster,backup,objectstore
 kubectl -n keycloak get deployment keycloak-logical-backup
 kubectl -n keycloak get pvc keycloak-backups
 kubectl -n jenkins get statefulset,pvc,externalsecret,certificate
+kubectl -n headlamp get deployment,service,externalsecret,certificate,ingressroute
 ```
 
 All Argo CD Applications should become Healthy and Synced. Some workloads will remain Pending until their ExternalSecrets are Ready. The Velero backup storage location must report `Available` before creating the first backup.
 
 ## Network setup
 
-Create split DNS records on the LAN for `auth`, `git`, `gitlab`, `registry`, `grafana`, `argocd`, `longhorn`, and `jenkins` under `mmlinaric.com`, all pointing to `192.168.70.100`. Keep the public records attached to the Cloudflare Tunnel only for `auth`, `git`, `gitlab`, and `registry`.
+Create split DNS records on the LAN for `auth`, `git`, `gitlab`, `registry`, `grafana`, `argocd`, `longhorn`, `jenkins`, and `headlamp` under `mmlinaric.com`, all pointing to `192.168.70.100`. Keep the public records attached to the Cloudflare Tunnel only for `auth`, `git`, `gitlab`, and `registry`.
 
 Test before changing shared DNS by adding the names to a workstation hosts file with `192.168.70.100`.
 

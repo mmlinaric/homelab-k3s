@@ -17,5 +17,6 @@ resources:
   - applications/alloy.yaml
   - applications/blackbox-exporter.yaml
   - applications/jenkins.yaml
+  - applications/headlamp.yaml
   - applications/platform-config.yaml
   - applications/workloads.yaml

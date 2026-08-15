@@ -1,0 +1,145 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: headlamp-oidc
+  namespace: headlamp
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: bitwarden
+    kind: ClusterSecretStore
+  target:
+    name: headlamp-oidc
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        OIDC_CLIENT_ID: headlamp
+        OIDC_CLIENT_SECRET: "{{ .clientSecret }}"
+        OIDC_ISSUER_URL: https://auth.mmlinaric.com/realms/homelab
+        OIDC_SCOPES: openid,profile,email,groups
+        OIDC_CALLBACK_URL: https://headlamp.mmlinaric.com/oidc-callback
+        OIDC_USE_PKCE: "true"
+  data:
+    - secretKey: clientSecret
+      remoteRef:
+        key: 62872de9-ca51-493b-a77c-b4a7009d3e9b
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: headlamp
+  namespace: headlamp
+spec:
+  secretName: headlamp-tls
+  dnsNames: [headlamp.mmlinaric.com]
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: headlamp-lan-only
+  namespace: headlamp
+spec:
+  ipAllowList:
+    sourceRange:
+      - 192.168.88.0/24
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: headlamp-lan
+  namespace: headlamp
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: Host(`headlamp.mmlinaric.com`)
+      kind: Rule
+      middlewares:
+        - name: headlamp-lan-only
+      services:
+        - name: headlamp
+          port: 80
+  tls:
+    secretName: headlamp-tls
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: headlamp-homelab-admins
+subjects:
+  - kind: Group
+    apiGroup: rbac.authorization.k8s.io
+    name: oidc:homelab-admins
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: headlamp-default-deny
+  namespace: headlamp
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: headlamp-ingress
+  namespace: headlamp
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: headlamp
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+      ports:
+        - {protocol: TCP, port: 4466}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: headlamp-egress
+  namespace: headlamp
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: headlamp
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.1/32
+      ports:
+        - {protocol: TCP, port: 443}
+    # K3s evaluates egress after translating the kubernetes Service to a
+    # control-plane node, so permit API traffic to the cluster node subnet.
+    - to:
+        - ipBlock:
+            cidr: 192.168.70.0/24
+      ports:
+        - {protocol: TCP, port: 6443}
+    - to:
+        - ipBlock:
+            cidr: 192.168.70.100/32
+      ports:
+        - {protocol: TCP, port: 443}
