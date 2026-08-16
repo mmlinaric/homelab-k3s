@@ -60,6 +60,20 @@ spec:
             cidr: 192.168.70.100/32
       ports:
         - {protocol: TCP, port: 443}
+    # Service traffic may be DNATed to Traefik's endpoint before network-policy
+    # evaluation. Permit that endpoint explicitly as well as the LoadBalancer
+    # VIP above, so Forgejo's Jenkins webhook can reach the websecure entrypoint.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: traefik-traefik
+              app.kubernetes.io/name: traefik
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 8443}
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
@@ -173,4 +187,3 @@ spec:
         - ipBlock: {cidr: 192.168.70.0/24}
       ports:
         - {protocol: TCP, port: 6443}
-
