@@ -16,6 +16,7 @@ resources:
   - applications/loki.yaml
   - applications/alloy.yaml
   - applications/blackbox-exporter.yaml
+  - applications/forgejo.yaml
   - applications/jenkins.yaml
   - applications/headlamp.yaml
   - applications/platform-config.yaml

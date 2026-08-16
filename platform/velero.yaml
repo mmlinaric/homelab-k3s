@@ -212,6 +212,120 @@ spec:
 apiVersion: velero.io/v1
 kind: Schedule
 metadata:
+  name: forgejo-daily
+  namespace: velero
+spec:
+  schedule: "0 4 * * *"
+  template:
+    includedNamespaces: [forgejo]
+    excludedResources: [secrets]
+    labelSelector:
+      matchLabels:
+        backup.homelab/strategy: velero
+    storageLocation: default
+    snapshotVolumes: true
+    snapshotMoveData: true
+    itemOperationTimeout: 4h
+    ttl: 336h
+    hooks:
+      resources:
+        - name: forgejo-consistent-backup
+          includedNamespaces: [forgejo]
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: forgejo-backup
+          pre:
+            - exec:
+                container: backup-coordinator
+                command: [/bin/sh, /scripts/pre-backup.sh]
+                onError: Fail
+                timeout: 15m
+          post:
+            - exec:
+                container: backup-coordinator
+                command: [/bin/sh, /scripts/post-backup.sh]
+                onError: Continue
+                timeout: 2m
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: forgejo-weekly
+  namespace: velero
+spec:
+  schedule: "0 6 * * 0"
+  template:
+    includedNamespaces: [forgejo]
+    excludedResources: [secrets]
+    labelSelector:
+      matchLabels:
+        backup.homelab/strategy: velero
+    storageLocation: default
+    snapshotVolumes: true
+    snapshotMoveData: true
+    itemOperationTimeout: 4h
+    ttl: 1344h
+    hooks:
+      resources:
+        - name: forgejo-consistent-backup
+          includedNamespaces: [forgejo]
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: forgejo-backup
+          pre:
+            - exec:
+                container: backup-coordinator
+                command: [/bin/sh, /scripts/pre-backup.sh]
+                onError: Fail
+                timeout: 15m
+          post:
+            - exec:
+                container: backup-coordinator
+                command: [/bin/sh, /scripts/post-backup.sh]
+                onError: Continue
+                timeout: 2m
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: forgejo-monthly
+  namespace: velero
+spec:
+  schedule: "0 9 1 * *"
+  template:
+    includedNamespaces: [forgejo]
+    excludedResources: [secrets]
+    labelSelector:
+      matchLabels:
+        backup.homelab/strategy: velero
+    storageLocation: default
+    snapshotVolumes: true
+    snapshotMoveData: true
+    itemOperationTimeout: 4h
+    ttl: 8784h
+    hooks:
+      resources:
+        - name: forgejo-consistent-backup
+          includedNamespaces: [forgejo]
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: forgejo-backup
+          pre:
+            - exec:
+                container: backup-coordinator
+                command: [/bin/sh, /scripts/pre-backup.sh]
+                onError: Fail
+                timeout: 15m
+          post:
+            - exec:
+                container: backup-coordinator
+                command: [/bin/sh, /scripts/post-backup.sh]
+                onError: Continue
+                timeout: 2m
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
   name: dependency-track-daily
   namespace: velero
 spec:
