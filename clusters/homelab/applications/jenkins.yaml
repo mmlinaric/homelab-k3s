@@ -48,7 +48,8 @@ spec:
             - workflow-aggregator:608.v67378e9d3db_1
             - pipeline-graph-view:998.vc30deece0e36
             - git:5.10.1
-            - gitlab-branch-source:743.ve0c8154a_8da_b_
+            - gitea:273.vb_78d13f6d9a_d
+            - job-dsl:3732.v9a_c49a_61a_313
             - git-forensics:4.2463.vf6fecb_444a_b_3
             - docker-workflow:647.vf474049b_b_303
             - junit:1418.v67a_81935603c
@@ -73,6 +74,8 @@ spec:
               keyName: escape-hatch-password
             - name: jenkins-runtime
               keyName: docker-agent-ssh-private-key
+            - name: jenkins-runtime
+              keyName: forgejo-api-token
           admin:
             createSecret: false
           JCasC:
@@ -146,16 +149,73 @@ spec:
                 security:
                   contentSecurityPolicy:
                     enforce: true
-              gitlab-server: |-
+              forgejo-credentials: |-
+                credentials:
+                  system:
+                    domainCredentials:
+                      - credentials:
+                          - giteaAccessToken:
+                              scope: SYSTEM
+                              id: forgejo-jenkins-api
+                              description: Forgejo API token for repository discovery, webhooks, and commit statuses
+                              token: "${jenkins-runtime-forgejo-api-token}"
+              forgejo-server: |-
                 unclassified:
-                  gitLabServers:
+                  giteaServers:
                     servers:
-                      - name: gitlab
-                        serverUrl: https://gitlab.mmlinaric.com
-                        credentialsId: gitlab-jenkins-api
-                        manageWebHooks: true
-                        manageSystemHooks: false
-                        immediateHookTrigger: false
+                      - displayName: Forgejo
+                        serverUrl: https://git.mmlinaric.com
+                        credentialsId: forgejo-jenkins-api
+                        manageHooks: true
+              forgejo-organization-folder: |-
+                jobs:
+                  - script: >
+                      organizationFolder('forgejo-mmlinaric') {
+                        description('Automatically discovers Forgejo repositories owned by mmlinaric that contain a Jenkinsfile.')
+                        displayName('Forgejo · mmlinaric')
+                        organizations {
+                          gitea {
+                            serverUrl('https://git.mmlinaric.com')
+                            repoOwner('mmlinaric')
+                            credentialsId('forgejo-jenkins-api')
+                            traits {
+                              giteaExcludeArchivedRepositories {}
+                              giteaBranchDiscovery {
+                                strategyId(1)
+                              }
+                              giteaPullRequestDiscovery {
+                                strategyId(1)
+                              }
+                              giteaForkDiscovery {
+                                strategyId(1)
+                                trust {
+                                  giteaTrustContributors {}
+                                }
+                              }
+                              giteaWebhookRegistration {
+                                mode('ITEM')
+                              }
+                            }
+                          }
+                        }
+                        projectFactories {
+                          workflowMultiBranchProjectFactory {
+                            scriptPath('Jenkinsfile')
+                          }
+                        }
+                        orphanedItemStrategy {
+                          discardOldItems {
+                            daysToKeep(30)
+                            numToKeep(20)
+                          }
+                        }
+                        configure { node ->
+                          node / triggers / 'com.cloudbees.hudson.plugins.folder.computed.PeriodicFolderTrigger' {
+                            spec('H * * * *')
+                            interval(3600000)
+                          }
+                        }
+                      }
               thin-backup: |-
                 unclassified:
                   resourceRoot:
