@@ -162,7 +162,7 @@ spec:
             actions:
               ENABLED: false
             packages:
-              ENABLED: false
+              ENABLED: true
             api:
               ENABLE_SWAGGER: false
             federation:
