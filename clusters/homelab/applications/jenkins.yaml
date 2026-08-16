@@ -154,6 +154,14 @@ spec:
                   system:
                     domainCredentials:
                       - credentials:
+                          - basicSSHUserPrivateKey:
+                              scope: SYSTEM
+                              id: jenkins-docker-agent-ssh
+                              description: SSH key for the Jenkins Docker build agent
+                              username: jenkins
+                              privateKeySource:
+                                directEntry:
+                                  privateKey: "${jenkins-runtime-docker-agent-ssh-private-key}"
                           - giteaAccessToken:
                               scope: SYSTEM
                               id: forgejo-jenkins-api
