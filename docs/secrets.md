@@ -69,7 +69,7 @@ Create one Bitwarden secret per value below. Replace each `CHANGE_ME_BWS_*_ID` i
 | Forgejo | database credentials, OIDC client secret, bootstrap administrator credentials |
 | Velero | Velero S3 access key and secret key, permanent Kopia repository password |
 | Grafana | admin credentials, Keycloak OIDC client secret |
-| Jenkins | Keycloak OIDC client secret, escape-hatch username and password |
+| Jenkins | Keycloak OIDC client secret, escape-hatch username and password, Dependency-Track API key |
 | Alertmanager | Telegram bot token and numeric chat ID |
 | K3s etcd | etcd S3 access key, secret key, bucket name, OVH endpoint host name, OVH region |
 | Argo CD | Keycloak OIDC client secret |

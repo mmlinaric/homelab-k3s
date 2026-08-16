@@ -77,6 +77,8 @@ spec:
               keyName: docker-agent-ssh-private-key
             - name: jenkins-runtime
               keyName: forgejo-api-token
+            - name: jenkins-runtime
+              keyName: dependency-track-api-key
           admin:
             createSecret: false
           JCasC:
@@ -150,7 +152,7 @@ spec:
                 security:
                   contentSecurityPolicy:
                     enforce: true
-              forgejo-credentials: |-
+              managed-credentials: |-
                 credentials:
                   system:
                     domainCredentials:
@@ -168,6 +170,11 @@ spec:
                               id: forgejo-jenkins-api
                               description: Forgejo API token for repository discovery, webhooks, and commit statuses
                               token: "${jenkins-runtime-forgejo-api-token}"
+                          - string:
+                              scope: GLOBAL
+                              id: dependency-track-api-key
+                              description: Dependency-Track API key for Jenkins SBOM publishing
+                              secret: "${jenkins-runtime-dependency-track-api-key}"
               forgejo-server: |-
                 unclassified:
                   giteaServers:
