@@ -170,6 +170,12 @@ spec:
                               id: forgejo-jenkins-api
                               description: Forgejo API token for repository discovery, webhooks, and commit statuses
                               token: "${jenkins-runtime-forgejo-api-token}"
+                          - usernamePassword:
+                              scope: GLOBAL
+                              id: forgejo-registry
+                              description: Forgejo OCI registry credentials for image publishing
+                              username: mmlinaric
+                              password: "${jenkins-runtime-forgejo-api-token}"
                           - string:
                               scope: GLOBAL
                               id: dependency-track-api-key
