@@ -78,6 +78,8 @@ spec:
             - name: jenkins-runtime
               keyName: forgejo-api-token
             - name: jenkins-runtime
+              keyName: forgejo-registry-token
+            - name: jenkins-runtime
               keyName: dependency-track-api-key
           admin:
             createSecret: false
@@ -175,7 +177,7 @@ spec:
                               id: forgejo-registry
                               description: Forgejo OCI registry credentials for image publishing
                               username: mmlinaric
-                              password: "${jenkins-runtime-forgejo-api-token}"
+                              password: "${jenkins-runtime-forgejo-registry-token}"
                           - string:
                               scope: GLOBAL
                               id: dependency-track-api-key
