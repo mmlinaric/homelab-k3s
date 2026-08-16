@@ -55,6 +55,7 @@ spec:
             - junit:1418.v67a_81935603c
             - coverage:3.3325.v2f3dd167a_b_e5
             - warnings-ng:13.10212.v247e4d8d9430
+            - dependency-track:7.1.0
             - credentials-binding:728.v902a_273b_8947
             - configuration-as-code:2117.vc05a_0b_e6b_f4e
             - oic-auth:4.718.ve731df6ca_88a_
@@ -223,6 +224,12 @@ spec:
                           }
                         }
                       }
+              dependency-track: |-
+                unclassified:
+                  dependencyTrackPublisher:
+                    dependencyTrackApiKey: dependency-track-api-key
+                    dependencyTrackFrontendUrl: https://dependency-track.mmlinaric.com
+                    dependencyTrackUrl: https://dependency-track.mmlinaric.com
               thin-backup: |-
                 unclassified:
                   resourceRoot:

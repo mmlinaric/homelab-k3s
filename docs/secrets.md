@@ -96,6 +96,13 @@ Generate the Jenkins OIDC escape-hatch password and keep it only in Bitwarden an
 openssl rand -base64 32
 ```
 
+For Jenkins SBOM publishing, create a dedicated Dependency-Track team and generate
+an API key for it. Grant `BOM_UPLOAD`, `VIEW_PORTFOLIO`,
+`VULNERABILITY_ANALYSIS`, `PROJECT_CREATION_UPLOAD`, `VIEW_VULNERABILITY`, and
+`VIEW_POLICY_VIOLATION`. Store the key in Jenkins as a Secret text credential
+with the ID `dependency-track-api-key`. Add `PORTFOLIO_MANAGEMENT` only if
+pipelines need to update project properties.
+
 Replace the three Jenkins placeholders in `apps/jenkins/secrets.yaml` with the UUIDs of the Jenkins OIDC client secret, escape-hatch username, and escape-hatch password before merging the deployment.
 
 Replace these non-secret placeholders directly in Git:
