@@ -166,7 +166,7 @@ spec:
                                 directEntry:
                                   privateKey: "${jenkins-runtime-docker-agent-ssh-private-key}"
                           - giteaAccessToken:
-                              scope: SYSTEM
+                              scope: GLOBAL
                               id: forgejo-jenkins-api
                               description: Forgejo API token for repository discovery, webhooks, and commit statuses
                               token: "${jenkins-runtime-forgejo-api-token}"
