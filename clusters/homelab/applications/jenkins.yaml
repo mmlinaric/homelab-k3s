@@ -85,7 +85,7 @@ spec:
             defaultConfig: false
             # Keep controller and plugin-owned XML that is not managed below.
             # With this enabled the chart's init container deletes config.xml
-            # and files such as the GitLab Branch Source server configuration.
+            # and other controller or plugin-owned state.
             overwriteConfiguration: false
             configScripts:
               controller: |-
@@ -211,7 +211,7 @@ spec:
                         }
                         triggers {
                           periodicFolderTrigger {
-                            interval('1h')
+                            interval('1d')
                           }
                         }
                       }
