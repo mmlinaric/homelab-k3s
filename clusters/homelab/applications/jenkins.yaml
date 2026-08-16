@@ -209,10 +209,9 @@ spec:
                             numToKeep(20)
                           }
                         }
-                        configure { node ->
-                          node / triggers / 'com.cloudbees.hudson.plugins.folder.computed.PeriodicFolderTrigger' {
-                            spec('H * * * *')
-                            interval(3600000)
+                        triggers {
+                          periodicFolderTrigger {
+                            interval('1h')
                           }
                         }
                       }
