@@ -17,6 +17,11 @@ ingress:
     originRequest:
       originServerName: registry.mmlinaric.com
       httpHostHeader: registry.mmlinaric.com
+  - hostname: git.mmlinaric.com
+    service: https://traefik-tunnel.traefik.svc.cluster.local:8443
+    originRequest:
+      originServerName: git.mmlinaric.com
+      httpHostHeader: git.mmlinaric.com
   - hostname: mmlinaric.com
     service: https://traefik-tunnel.traefik.svc.cluster.local:8443
     originRequest:
