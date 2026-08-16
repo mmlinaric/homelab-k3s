@@ -7,7 +7,9 @@ metadata:
     argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
 spec:
   serviceName: gitlab
-  replicas: 1
+  # Intentionally parked after the Forgejo migration. Set back to 1 to restore
+  # the existing instance; its PVCs and backup resources remain retained.
+  replicas: 0
   podManagementPolicy: OrderedReady
   updateStrategy:
     type: RollingUpdate

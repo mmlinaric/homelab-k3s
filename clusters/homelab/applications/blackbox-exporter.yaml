@@ -18,13 +18,8 @@ spec:
           targets:
             - name: keycloak
               url: https://auth.mmlinaric.com/realms/homelab
-            - name: gitlab
-              url: https://gitlab.mmlinaric.com/-/readiness
             - name: forgejo
               url: https://git.mmlinaric.com/api/healthz
-            - name: registry
-              url: https://registry.mmlinaric.com/v2/
-              module: http_2xx_or_3xx_or_401
             - name: portfolio
               url: https://mmlinaric.com/
             - name: jenkins
