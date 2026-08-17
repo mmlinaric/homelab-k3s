@@ -1,16 +1,15 @@
 # Hermes Agent Kubernetes access
 
-Hermes can diagnose the cluster and re-run an Argo CD sync, but it must not
-receive the administrator kubeconfig. Apply the RBAC manifest in this
+Hermes can diagnose the cluster, but it must not receive the administrator
+kubeconfig. Apply the RBAC manifest in this
 repository first; Argo CD will then maintain the `argocd/hermes-agent` service
 account and its deliberately narrow role.
 
 The role can read workload status, events, selected controller and backup
-custom resources, node and storage metadata, and pod logs. It can create only
-the Argo CD `applications/sync` subresource, which re-applies the already
-committed desired state. It cannot read Secrets or ConfigMaps, exec into,
-attach to, or port-forward a pod, manage RBAC, alter workload specifications,
-or delete resources.
+custom resources, node and storage metadata, pod logs, and Argo CD
+Application status. It cannot read Secrets or ConfigMaps, exec into, attach
+to, or port-forward a pod, manage RBAC, alter workload specifications, sync
+an Argo CD Application, or delete resources.
 
 ## Create the kubeconfig
 
@@ -56,13 +55,12 @@ Verify the boundary before giving the file to Hermes:
 ```bash
 export KUBECONFIG="$HOME/.hermes/kube/hermes-agent.kubeconfig"
 kubectl auth can-i get pods --all-namespaces
-kubectl auth can-i create applications/sync -n argocd
 kubectl auth can-i get secrets --all-namespaces
 kubectl auth can-i create pods/exec -n gitlab
 kubectl auth can-i delete deployments -n gitlab
 ```
 
-The first two commands should return `yes`; the final three must return `no`.
+The first command should return `yes`; the final three must return `no`.
 
 ## Run Hermes with the constrained credential
 
@@ -97,9 +95,11 @@ separate host or VM and firewall its egress to the Kubernetes API only.
 ## What Hermes can fix
 
 It can identify failing pods, image-pull and scheduling failures, unhealthy
-storage, failed backups, certificate/controller status, and Argo CD drift; it
-can retry a sync of the current Git revision. A broken Renovate change is a
-Git problem: Hermes should prepare a revert pull request or report the exact
-revision, while you retain the merge/deploy decision. Granting it permission
-to patch Argo Application sources or Kubernetes workloads would let it bypass
-GitOps and escalate a prompt-injection mistake into arbitrary cluster changes.
+storage, failed backups, certificate/controller status, and Argo CD drift. A
+broken Renovate change is a Git problem: Hermes should prepare a revert pull
+request or report the exact revision, while you retain the merge/deploy
+decision. Kubernetes RBAC cannot grant the Argo CD API's sync action without
+also introducing a separately authenticated Argo CD boundary. Granting it
+permission to patch Argo Application sources or Kubernetes workloads would let
+it bypass GitOps and escalate a prompt-injection mistake into arbitrary cluster
+changes.

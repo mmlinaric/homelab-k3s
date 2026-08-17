@@ -57,11 +57,8 @@ rules:
   # Controller and backup health. These custom resources do not contain the
   # rendered secret values held by their respective Secret objects.
   - apiGroups: [argoproj.io]
-    resources: [applications, applications/operation]
+    resources: [applications]
     verbs: [get, list, watch]
-  - apiGroups: [argoproj.io]
-    resources: [applications/sync]
-    verbs: [create]
   - apiGroups: [cert-manager.io]
     resources: [certificates, certificaterequests, orders, challenges]
     verbs: [get, list, watch]
