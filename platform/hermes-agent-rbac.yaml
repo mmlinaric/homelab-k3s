@@ -1,0 +1,95 @@
+---
+# This identity is for the Hermes Telegram agent. It deliberately has no
+# permission to read Secrets, ConfigMaps, service accounts, RBAC objects, or
+# pod filesystems, and it cannot change or delete Kubernetes workloads.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hermes-agent
+  namespace: argocd
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hermes-agent-diagnostics
+rules:
+  # Workload state, scheduling failures, and container logs. Do not add
+  # pods/exec, pods/attach, or pods/portforward: each exposes pod contents.
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - services
+      - endpoints
+      - persistentvolumeclaims
+      - persistentvolumes
+      - events
+      - namespaces
+      - nodes
+      - resourcequotas
+      - limitranges
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, daemonsets, statefulsets, replicasets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: [get, list, watch]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list, watch]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses, volumeattachments, csidrivers]
+    verbs: [get, list, watch]
+  - apiGroups: [snapshot.storage.k8s.io]
+    resources: [volumesnapshots, volumesnapshotcontents, volumesnapshotclasses]
+    verbs: [get, list, watch]
+  # Controller and backup health. These custom resources do not contain the
+  # rendered secret values held by their respective Secret objects.
+  - apiGroups: [argoproj.io]
+    resources: [applications, applications/operation]
+    verbs: [get, list, watch]
+  - apiGroups: [argoproj.io]
+    resources: [applications/sync]
+    verbs: [create]
+  - apiGroups: [cert-manager.io]
+    resources: [certificates, certificaterequests, orders, challenges]
+    verbs: [get, list, watch]
+  - apiGroups: [external-secrets.io]
+    resources: [externalsecrets]
+    verbs: [get, list, watch]
+  - apiGroups: [postgresql.cnpg.io]
+    resources: [clusters, backups, scheduledbackups]
+    verbs: [get, list, watch]
+  - apiGroups: [velero.io]
+    resources: [backups, schedules, backuprepositories, datauploads, restores]
+    verbs: [get, list, watch]
+  - apiGroups: [longhorn.io]
+    resources: [volumes, replicas, engines, nodes]
+    verbs: [get, list, watch]
+  - apiGroups: [metrics.k8s.io]
+    resources: [nodes, pods]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: hermes-agent-diagnostics
+subjects:
+  - kind: ServiceAccount
+    name: hermes-agent
+    namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: hermes-agent-diagnostics
