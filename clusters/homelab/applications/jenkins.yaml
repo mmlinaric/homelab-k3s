@@ -131,8 +131,10 @@ spec:
                     url: https://jenkins.mmlinaric.com
               telemetry: |-
                 jenkins:
-                  telemetry:
-                    enabled: false
+                  # This core JCasC setting disables anonymous usage statistics.
+                  # Retain the telemetry script name to overwrite the invalid
+                  # telemetry.yaml already persisted in JENKINS_HOME.
+                  noUsageStatistics: true
               docker-agent-node: |-
                 jenkins:
                   nodes:
