@@ -7,7 +7,7 @@ metadata:
     argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
 spec:
   instances: 1
-  image: quay.io/keycloak/keycloak:26.7.1
+  image: quay.io/keycloak/keycloak:26.7.2
   startOptimized: false
   bootstrapAdmin:
     user:
