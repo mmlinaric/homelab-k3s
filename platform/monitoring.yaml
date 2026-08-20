@@ -223,6 +223,50 @@ spec:
           labels: {severity: critical}
           annotations:
             summary: "Longhorn volume {{ $labels.pvc_namespace }}/{{ $labels.pvc }} is {{ $labels.state }}"
+    - name: homelab.resource-pressure
+      rules:
+        - alert: ContainerMemoryNearLimit
+          expr: >-
+            max by (namespace, pod, container) (
+              container_memory_usage_bytes{container!="", image!=""}
+            )
+            /
+            max by (namespace, pod, container) (
+              kube_pod_container_resource_limits{resource="memory", unit="byte"} > 0
+            ) > 0.95
+          for: 15m
+          labels: {severity: warning}
+          annotations:
+            summary: "Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} is using more than 95 percent of its memory limit"
+        - alert: ContainerMemoryLimitEvents
+          expr: >-
+            sum by (namespace, pod, container) (
+              increase(container_memory_failcnt{container!="", image!=""}[5m])
+            ) > 100
+          for: 2m
+          labels: {severity: critical}
+          annotations:
+            summary: "Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} is repeatedly hitting its memory limit"
+        - alert: NodeHighIOWait
+          expr: avg by (instance) (rate(node_cpu_seconds_total{mode="iowait"}[5m])) > 0.10
+          for: 5m
+          labels: {severity: critical}
+          annotations:
+            summary: "Node {{ $labels.instance }} has spent more than 10 percent of CPU time waiting for I/O"
+        - alert: NodeDiskReadLatencyHigh
+          expr: >-
+            (
+              rate(node_disk_read_time_seconds_total{device!~"^(loop|ram|zram|fd|sr).*"}[5m])
+              /
+              rate(node_disk_reads_completed_total{device!~"^(loop|ram|zram|fd|sr).*"}[5m])
+              > 0.05
+            )
+            and on (instance, device)
+            rate(node_disk_reads_completed_total{device!~"^(loop|ram|zram|fd|sr).*"}[5m]) > 20
+          for: 5m
+          labels: {severity: critical}
+          annotations:
+            summary: "Disk {{ $labels.device }} on {{ $labels.instance }} has read latency above 50 milliseconds"
     - name: homelab.logging
       rules:
         - alert: LoggingPipelineUnavailable
