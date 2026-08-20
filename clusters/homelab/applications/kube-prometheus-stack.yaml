@@ -162,8 +162,8 @@ spec:
                   resources:
                     requests: {storage: 10Gi}
             resources:
-              requests: {cpu: 250m, memory: 768Mi}
-              limits: {cpu: 2, memory: 2Gi}
+              requests: {cpu: 250m, memory: 1536Mi}
+              limits: {cpu: 2, memory: 3Gi}
             serviceMonitorSelectorNilUsesHelmValues: false
             podMonitorSelectorNilUsesHelmValues: false
             ruleSelectorNilUsesHelmValues: false
@@ -171,10 +171,21 @@ spec:
           resources:
             requests: {cpu: 50m, memory: 128Mi}
             limits: {cpu: 500m, memory: 512Mi}
+        kubelet:
+          serviceMonitor:
+            metricRelabelings:
+              - action: drop
+                sourceLabels: [__name__]
+                regex: "^(apiserver|etcd)_.*"
         kubeProxy:
           enabled: true
           endpoints:
             - 192.168.70.10
+          serviceMonitor:
+            metricRelabelings:
+              - action: drop
+                sourceLabels: [__name__]
+                regex: "^(apiserver|etcd)_.*"
         kubeEtcd:
           enabled: false
         kubeControllerManager:

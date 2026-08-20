@@ -38,7 +38,7 @@ render_application traefik traefik/traefik 41.2.0 traefik clusters/homelab/appli
 render_application longhorn longhorn/longhorn 1.12.0 longhorn-system clusters/homelab/applications/longhorn.yaml
 render_application velero vmware-tanzu/velero 12.1.0 velero clusters/homelab/applications/velero.yaml
 render_application cloudnative-pg cnpg/cloudnative-pg 0.29.0 cnpg-system clusters/homelab/applications/cloudnative-pg.yaml
-render_application monitoring prometheus-community/kube-prometheus-stack 88.2.0 monitoring clusters/homelab/applications/kube-prometheus-stack.yaml
+render_application monitoring prometheus-community/kube-prometheus-stack 88.5.0 monitoring clusters/homelab/applications/kube-prometheus-stack.yaml
 render_application blackbox prometheus-community/prometheus-blackbox-exporter 11.17.2 monitoring clusters/homelab/applications/blackbox-exporter.yaml
 render_application loki grafana-community/loki 18.7.6 monitoring clusters/homelab/applications/loki.yaml
 render_application alloy grafana/alloy 1.11.1 monitoring clusters/homelab/applications/alloy.yaml
