@@ -228,16 +228,16 @@ spec:
         - alert: ContainerMemoryNearLimit
           expr: >-
             max by (namespace, pod, container) (
-              container_memory_usage_bytes{container!="", image!=""}
+              container_memory_working_set_bytes{container!="", image!=""}
             )
             /
             max by (namespace, pod, container) (
               kube_pod_container_resource_limits{resource="memory", unit="byte"} > 0
-            ) > 0.95
+            ) > 0.90
           for: 15m
           labels: {severity: warning}
           annotations:
-            summary: "Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} is using more than 95 percent of its memory limit"
+            summary: "Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} is using more than 90 percent of its memory limit"
         - alert: ContainerMemoryLimitEvents
           expr: >-
             sum by (namespace, pod, container) (
