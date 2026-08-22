@@ -4,7 +4,7 @@ Do not increase application replicas merely because nodes were joined. First con
 
 ## Join two server nodes
 
-Give each node a static LAN address, the same K3s token, matching K3s version, and `server: https://192.168.70.5:6443` in its K3s config. Remove `cluster-init` from joining nodes. Install the same host prerequisites and kube-vip static pod manifest. Embedded etcd then forms a three-member quorum.
+Give each node a static LAN address, the same K3s token, matching K3s version, and `server: https://192.168.60.5:6443` in its K3s config. Remove `cluster-init` from joining nodes. Install the same host prerequisites and kube-vip static pod manifest. Embedded etcd then forms a three-member quorum.
 
 Keep an odd number of server nodes. Spread them across independent Proxmox failure domains when possible.
 

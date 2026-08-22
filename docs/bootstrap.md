@@ -2,14 +2,14 @@
 
 ## Server preparation
 
-The target is Ubuntu Server on Proxmox with 10 vCPU, 20 GB static RAM, and a 400 GB disk. Reserve `192.168.70.10` in DHCP or configure it statically. Ensure the host name in `ansible/inventory/hosts.yml` resolves and that key-based SSH with sudo works.
+The target is Ubuntu Server on Proxmox with 10 vCPU, 20 GB static RAM, and a 400 GB disk. Reserve `192.168.60.10` in DHCP or configure it statically. Ensure the host name in `ansible/inventory/hosts.yml` resolves and that key-based SSH with sudo works.
 
 Before running Ansible:
 
 - Point `gitops_repo_url` at the private GitHub repository.
 - Push this repository to its `main` branch.
 - Complete every placeholder described in `secrets.md`.
-- Ensure `192.168.70.5` and `192.168.70.100` are unused.
+- Ensure `192.168.60.5` and `192.168.60.100` are unused.
 - Allow TCP 22, 80, 443, and 6443 from the LAN. Allow outbound HTTPS, DNS, NTP, and Cloudflare Tunnel traffic.
 
 ## Controller setup
@@ -22,7 +22,7 @@ ansible-galaxy collection install -r collections/requirements.yml
 ansible-playbook playbooks/bootstrap.yml
 ```
 
-The playbook installs host dependencies, disables swap, installs the pinned K3s release, creates the API VIP, installs Helm, bootstraps cert-manager, External Secrets Operator, and Argo CD, then applies the root Application. It writes a local `kubeconfig` that targets `192.168.70.5`.
+The playbook installs host dependencies, disables swap, installs the pinned K3s release, creates the API VIP, installs Helm, bootstraps cert-manager, External Secrets Operator, and Argo CD, then applies the root Application. It writes a local `kubeconfig` that targets `192.168.60.5`.
 
 ## Initial checks
 
@@ -46,9 +46,9 @@ All Argo CD Applications should become Healthy and Synced. Some workloads will r
 
 ## Network setup
 
-Create split DNS records on the LAN for `auth`, `git`, `gitlab`, `registry`, `grafana`, `argocd`, `longhorn`, `jenkins`, and `headlamp` under `mmlinaric.com`, all pointing to `192.168.70.100`. Keep the public records attached to the Cloudflare Tunnel only for `auth`, `git`, `gitlab`, and `registry`.
+Create split DNS records on the LAN for `auth`, `git`, `gitlab`, `registry`, `grafana`, `argocd`, `longhorn`, `jenkins`, and `headlamp` under `mmlinaric.com`, all pointing to `192.168.60.100`. Keep the public records attached to the Cloudflare Tunnel only for `auth`, `git`, `gitlab`, and `registry`.
 
-Test before changing shared DNS by adding the names to a workstation hosts file with `192.168.70.100`.
+Test before changing shared DNS by adding the names to a workstation hosts file with `192.168.60.100`.
 
 ## Longhorn disk reserve
 

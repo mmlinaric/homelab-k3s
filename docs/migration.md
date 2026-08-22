@@ -127,7 +127,7 @@ sudo k3s kubectl -n gitlab exec gitlab-0 -- gitlab-rake gitlab:doctor:secrets
 
 ## Cutover and acceptance
 
-1. Point LAN split DNS at `192.168.70.100` and confirm the Cloudflare Tunnel routes are healthy.
+1. Point LAN split DNS at `192.168.60.100` and confirm the Cloudflare Tunnel routes are healthy.
 2. Remove any workstation hosts-file overrides.
 3. Test Keycloak admin only from the LAN. Confirm public `/admin` and `/realms/master` routes return 404.
 4. Test GitLab OIDC, HTTPS Git operations, and registry operations.
