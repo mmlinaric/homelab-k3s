@@ -6,7 +6,7 @@ This repository is the declarative replacement for the Docker Compose homelab. I
 
 ```text
 Internet -> Cloudflare Tunnel -> Traefik tunnel entrypoint -> public routes
-LAN DNS  -> 192.168.70.100 -> Traefik websecure entrypoint -> all LAN routes
+LAN DNS  -> 192.168.60.100 -> Traefik websecure entrypoint -> all LAN routes
                                       |
                   GitLab, Forgejo, Keycloak, and Jenkins
                                       |
@@ -16,12 +16,12 @@ LAN DNS  -> 192.168.70.100 -> Traefik websecure entrypoint -> all LAN routes
 
 Alloy DaemonSet -> Kubernetes pod log API -> Loki -> Grafana Explore
 
-Operator -> 192.168.70.5 -> kube-vip -> K3s API
+Operator -> 192.168.60.5 -> kube-vip -> K3s API
 Git push -> GitHub main -> Argo CD auto-sync
 Bitwarden Secrets Manager -> External Secrets Operator -> Kubernetes Secrets
 ```
 
-The first node is `192.168.70.10`. MetalLB assigns `192.168.70.100` to Traefik, and kube-vip owns `192.168.70.5` for the Kubernetes API. GitLab and Forgejo expose Git over HTTPS only. GitLab Runner and Forgejo Actions are intentionally absent.
+The first node is `192.168.60.10`. MetalLB assigns `192.168.60.100` to Traefik, and kube-vip owns `192.168.60.5` for the Kubernetes API. GitLab and Forgejo expose Git over HTTPS only. GitLab Runner and Forgejo Actions are intentionally absent.
 
 ## Repository layout
 

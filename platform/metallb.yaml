@@ -5,7 +5,7 @@ metadata:
   namespace: metallb-system
 spec:
   addresses:
-    - 192.168.70.100/32
+    - 192.168.60.100/32
   autoAssign: false
   avoidBuggyIPs: true
 ---
@@ -17,4 +17,3 @@ metadata:
 spec:
   ipAddressPools:
     - ingress
-

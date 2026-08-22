@@ -12,7 +12,7 @@ ports:
     protocol: TCP
     port: 10249
 endpoints:
-  - addresses: [192.168.70.10]
+  - addresses: [192.168.60.10]
     conditions:
       ready: true
     nodeName: k3s-01

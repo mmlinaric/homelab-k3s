@@ -74,7 +74,7 @@ Logging alerts use two paths. Prometheus evaluates Loki, Alloy, canary, and stor
 Longhorn access requires both a client address in the administrator LAN `192.168.88.0/24` and the Keycloak client role `longhorn:admin`. Verify the controls after authentication or network changes:
 
 ```bash
-curl -Ik --resolve longhorn.mmlinaric.com:443:192.168.70.100 https://longhorn.mmlinaric.com/
+curl -Ik --resolve longhorn.mmlinaric.com:443:192.168.60.100 https://longhorn.mmlinaric.com/
 kubectl -n longhorn-system logs deployment/longhorn-oauth2-proxy
 ```
 

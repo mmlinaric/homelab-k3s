@@ -180,7 +180,7 @@ spec:
         kubeProxy:
           enabled: true
           endpoints:
-            - 192.168.70.10
+            - 192.168.60.10
           serviceMonitor:
             metricRelabelings:
               - action: drop

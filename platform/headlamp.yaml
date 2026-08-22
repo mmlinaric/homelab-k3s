@@ -135,12 +135,12 @@ spec:
     # control-plane node, so permit API traffic to the cluster node subnet.
     - to:
         - ipBlock:
-            cidr: 192.168.70.0/24
+            cidr: 192.168.60.0/24
       ports:
         - {protocol: TCP, port: 6443}
     - to:
         - ipBlock:
-            cidr: 192.168.70.100/32
+            cidr: 192.168.60.100/32
       ports:
         - {protocol: TCP, port: 443}
     # Keycloak's canonical issuer resolves to Cloudflare from cluster DNS.

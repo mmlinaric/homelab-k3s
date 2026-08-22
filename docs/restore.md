@@ -166,7 +166,7 @@ sudo k3s server \
 sudo systemctl start k3s
 ```
 
-Reapply the kube-vip manifest if needed, verify the API through `192.168.70.5`, and let Argo CD reconcile. Rotate any credential exposed during the recovery session.
+Reapply the kube-vip manifest if needed, verify the API through `192.168.60.5`, and let Argo CD reconcile. Rotate any credential exposed during the recovery session.
 
 ## Longhorn local recovery
 
