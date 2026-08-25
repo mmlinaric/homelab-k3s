@@ -206,7 +206,8 @@ metadata:
 spec:
   ipAllowList:
     sourceRange:
-      - 192.168.88.0/24
+      - 192.168.30.0/24
+      - 192.168.90.0/24
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
