@@ -71,18 +71,18 @@ Retention is enforced by Loki's compactor. Increase both `loki.limits_config.ret
 
 Logging alerts use two paths. Prometheus evaluates Loki, Alloy, canary, and storage health rules. Loki's ruler evaluates LogQL rules for GitLab, Forgejo, and Keycloak error bursts and fatal signatures. Both paths send firing alerts to the existing Alertmanager and Telegram receiver. Keep generic error thresholds conservative; add application-specific signatures only after confirming the exact production log format in Logs Drilldown.
 
-Longhorn access requires both a client address in the administrator LAN `192.168.88.0/24` and the Keycloak client role `longhorn:admin`. Verify the controls after authentication or network changes:
+Longhorn access requires both a client address in the trusted network `192.168.30.0/24` or VPN network `192.168.90.0/24` and the Keycloak client role `longhorn:admin`. Verify the controls after authentication or network changes:
 
 ```bash
 curl -Ik --resolve longhorn.mmlinaric.com:443:192.168.60.100 https://longhorn.mmlinaric.com/
 kubectl -n longhorn-system logs deployment/longhorn-oauth2-proxy
 ```
 
-An unauthenticated LAN request must redirect to Keycloak. A user without `longhorn:admin` must receive an authorization failure, while a user with the role must reach the Longhorn UI. A request originating outside `192.168.88.0/24` must receive HTTP 403 before authentication.
+An unauthenticated request from an allowed network must redirect to Keycloak. A user without `longhorn:admin` must receive an authorization failure, while a user with the role must reach the Longhorn UI. A request originating outside `192.168.30.0/24` and `192.168.90.0/24` must receive HTTP 403 before authentication.
 
 ## Headlamp access
 
-Headlamp is available only from the administrator LAN at `https://headlamp.mmlinaric.com`. It uses native Kubernetes OIDC authentication, so authorization is evaluated by the API server rather than by Headlamp's service account.
+Headlamp is available only from the trusted network `192.168.30.0/24` and VPN network `192.168.90.0/24` at `https://headlamp.mmlinaric.com`. It uses native Kubernetes OIDC authentication, so authorization is evaluated by the API server rather than by Headlamp's service account.
 
 Cluster DNS resolves `auth.mmlinaric.com` through Cloudflare. Headlamp therefore permits public HTTPS egress for OIDC discovery and token exchange while continuing to deny other private-network destinations except the Kubernetes API. The canonical issuer hostname and TLS verification remain unchanged.
 
@@ -106,7 +106,7 @@ kubectl auth can-i --as=oidc:headlamp-admin \
   --as-group=oidc:homelab-admins '*' '*'
 ```
 
-The Headlamp service account check must return `no`; the OIDC administrator check must return `yes`. A `homelab-admins` member must be able to sign in and administer resources. An authenticated user outside that group must not be able to read cluster resources, and a request originating outside `192.168.88.0/24` must receive HTTP 403.
+The Headlamp service account check must return `no`; the OIDC administrator check must return `yes`. A `homelab-admins` member must be able to sign in and administer resources. An authenticated user outside that group must not be able to read cluster resources, and a request originating outside `192.168.30.0/24` and `192.168.90.0/24` must receive HTTP 403.
 
 If K3s fails to return after enabling OIDC, remove the `kube-apiserver-arg` OIDC entries from `/etc/rancher/k3s/config.yaml`, restart `k3s`, and correct issuer reachability or token claims before retrying. Existing client-certificate kubeconfigs remain the recovery authentication path.
 

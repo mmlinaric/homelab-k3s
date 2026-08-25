@@ -56,7 +56,18 @@ if ([regex]::Matches($ingress, '(?m)^\s+- name: longhorn-frontend\s*$').Count -n
 }
 
 $lanOnly = Get-ResourceDocument -Kind "Middleware" -Name "longhorn-lan-only"
-Assert-Match -Document $lanOnly -Pattern '(?m)^\s+- 192\.168\.88\.0/24\s*$' -Description "the source restriction must allow only the administrator LAN"
+$allowedSourceRanges = @(
+    [regex]::Matches($lanOnly, '(?m)^\s+- (\d{1,3}(?:\.\d{1,3}){3}/\d{1,2})\s*$') |
+        ForEach-Object { $_.Groups[1].Value }
+)
+$expectedSourceRanges = @("192.168.30.0/24", "192.168.90.0/24")
+if (
+    $allowedSourceRanges.Count -ne $expectedSourceRanges.Count -or
+    @($allowedSourceRanges | Where-Object { $_ -notin $expectedSourceRanges }).Count -ne 0 -or
+    @($expectedSourceRanges | Where-Object { $_ -notin $allowedSourceRanges }).Count -ne 0
+) {
+    throw "Longhorn authentication validation failed: the source restriction must allow only the trusted and VPN networks"
+}
 
 $forwardAuth = Get-ResourceDocument -Kind "Middleware" -Name "longhorn-forward-auth"
 Assert-Match -Document $forwardAuth -Pattern '(?m)^    address: http://longhorn-oauth2-proxy\.longhorn-system\.svc\.cluster\.local:4180/\s*$' -Description "ForwardAuth must use the in-cluster OAuth2 Proxy"
