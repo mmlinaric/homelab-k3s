@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+install -o root -g wazuh-dashboard -m 0640 \
+  /etc/letsencrypt/live/{{ wazuh_dashboard_hostname }}/fullchain.pem \
+  /etc/wazuh-dashboard/certs/public.pem
+install -o root -g wazuh-dashboard -m 0640 \
+  /etc/letsencrypt/live/{{ wazuh_dashboard_hostname }}/privkey.pem \
+  /etc/wazuh-dashboard/certs/public-key.pem
+systemctl restart wazuh-dashboard

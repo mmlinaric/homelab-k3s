@@ -123,6 +123,10 @@
       changed_when: true
       notify: Restart K3s
 
+    - name: Configure Kubernetes API auditing
+      ansible.builtin.include_tasks: ../tasks/k3s-audit.yml
+      tags: [k3s_audit]
+
     - name: Flush K3s restart handlers
       ansible.builtin.meta: flush_handlers
 

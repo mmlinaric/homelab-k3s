@@ -11,6 +11,7 @@ The backup system has four independent layers. Each layer has one job and one te
 | Dependency-Track logical | Validated `pg_dump` archive on `dependency-track-backups` PVC | `mmlinaric-homelab-velero`, prefix `homelab` | 14 daily, 8 weekly, 12 monthly restore windows |
 | Jenkins | Crash-consistent `JENKINS_HOME` snapshot plus idle thinBackup set | `mmlinaric-homelab-velero`, prefix `homelab` | 14 daily, 8 weekly, 12 monthly restore windows |
 | Local volumes | Longhorn snapshots | Cluster-local Longhorn storage | 3 daily snapshots plus weekly cleanup |
+| Wazuh `sec1` | OpenSearch snapshot plus manager/runtime state, encrypted by Restic | `mmlinaric-homelab-wazuh`, prefix `restic/sec1` | 14 daily, 8 weekly, 12 monthly recovery points |
 
 The weekly and monthly Velero schedules use TTL values of 56 days and 366 days. Their run frequency produces approximately 8 weekly and 12 monthly recovery points per application. Velero stores Kubernetes metadata in S3 and uses Kopia to encrypt and deduplicate moved volume data. OVH managed encryption protects the etcd objects at rest.
 
@@ -103,6 +104,18 @@ Before accepting a Jenkins recovery point, confirm that thinBackup created a new
 
 ## First backup activation
 
+### Wazuh activation
+
+The `sec1` backup is independent of Velero. Its systemd job briefly stops
+manager ingestion, creates a completed OpenSearch snapshot, captures the
+official Wazuh central-component state, restarts ingestion, and commits the
+combined recovery point to an encrypted Restic repository. See `wazuh.md` for
+bucket preparation, secret names, manual execution, and recovery.
+
+Do not accept the first recovery point until the OpenSearch snapshot reports
+`SUCCESS`, Restic lists the tagged snapshot, its checksum manifest validates,
+and the dedicated Telegram group receives the success notification.
+
 Generate the Kopia repository password before creating the first backup. Use at least 32 random bytes, store the value in Bitwarden, and place its secret UUID in `CHANGE_ME_BWS_VELERO_REPOSITORY_PASSWORD_ID`. This password must never be rotated after the first repository is created. A different password makes existing Kopia data unreadable.
 
 After Argo CD is healthy:
@@ -138,6 +151,7 @@ Quarterly, perform every applicable restore drill described in `restore.md`. Rec
 - Velero does not snapshot the live Keycloak or Dependency-Track databases. It moves validated logical dumps and provides their off-site recovery paths.
 - Velero does not back up embedded etcd. K3s owns control-plane snapshots.
 - Velero moves both a crash-consistent live Jenkins home and the application-aware thinBackup sets. Prefer the live PVC for exact controller recovery and retain Bitwarden, Git, and thinBackup as independent recovery paths.
+- Wazuh index history is backed up with the OpenSearch snapshot API. Never copy the live `/var/lib/wazuh-indexer` tree as a recovery method.
 - Longhorn snapshots are fast local rollback points. They are not off-site backups.
 - Prometheus history, Alertmanager state, and Grafana local state are disposable. Persist dashboard and alert changes in Git.
 - Git does not contain secret values. Bitwarden availability and the offline recovery kit are part of disaster recovery.

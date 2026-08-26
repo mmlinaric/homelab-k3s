@@ -1,0 +1,40 @@
+---
+- name: Create the protected K3s audit log directory
+  ansible.builtin.file:
+    path: /var/lib/rancher/k3s/server/logs
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Install the K3s API audit policy
+  ansible.builtin.template:
+    src: "{{ playbook_dir | dirname }}/templates/k3s-audit-policy.yaml.j2"
+    dest: /var/lib/rancher/k3s/server/audit.yaml
+    owner: root
+    group: root
+    mode: '0600'
+  notify: Restart K3s
+
+- name: Remove a legacy misplaced Kubernetes audit block
+  ansible.builtin.replace:
+    path: /etc/rancher/k3s/config.yaml
+    regexp: >-
+      (?ms)(^flannel-iface:[^\n]*\n)^  # BEGIN ANSIBLE MANAGED KUBERNETES AUDIT$.*?^  # END ANSIBLE MANAGED KUBERNETES AUDIT\n?(?=disable:)
+    replace: '\1'
+  notify: Restart K3s
+
+- name: Enable the bounded K3s API audit log backend
+  ansible.builtin.blockinfile:
+    path: /etc/rancher/k3s/config.yaml
+    marker: '  # {mark} ANSIBLE MANAGED KUBERNETES AUDIT'
+    insertbefore: '^kube-proxy-arg:'
+    block: |2
+        - "audit-log-path=/var/lib/rancher/k3s/server/logs/audit.log"
+        - "audit-policy-file=/var/lib/rancher/k3s/server/audit.yaml"
+        - "audit-log-maxage=14"
+        - "audit-log-maxbackup=10"
+        - "audit-log-maxsize=50"
+        - "audit-log-truncate-enabled=true"
+        - "audit-log-truncate-max-event-size=102400"
+  notify: Restart K3s

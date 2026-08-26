@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly sec1 Wazuh backup
+
+[Timer]
+OnCalendar=*-*-* 02:15:00 Europe/Zagreb
+Persistent=true
+RandomizedDelaySec=15m
+Unit=sec1-wazuh-backup.service
+
+[Install]
+WantedBy=timers.target

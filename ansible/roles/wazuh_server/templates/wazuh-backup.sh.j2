@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly backup_root="{{ wazuh_backup_mount }}"
+readonly repository_dir="${backup_root}/indexer-repository"
+readonly manager_dir="${backup_root}/manager-current"
+readonly work_dir="${backup_root}/manager-next"
+readonly security_work_dir="${backup_root}/indexer-security-next"
+readonly api="https://127.0.0.1:9200"
+readonly repository_name="sec1-local"
+readonly cert_dir="/etc/wazuh-indexer/certs"
+readonly lock_file="/run/sec1-wazuh-backup.lock"
+
+manager_stopped=0
+filebeat_stopped=0
+snapshot_name=""
+
+notify() {
+  local status="$1"
+  local message="$2"
+  curl --fail --silent --show-error --max-time 20 \
+    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+    --data-urlencode "text=sec1 Wazuh backup ${status}: ${message}" \
+    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" >/dev/null || true
+}
+
+indexer() {
+  curl --fail --silent --show-error \
+    --cacert "${cert_dir}/root-ca.pem" \
+    --cert "${cert_dir}/admin.pem" \
+    --key "${cert_dir}/admin-key.pem" \
+    "$@"
+}
+
+restart_ingestion() {
+  if (( filebeat_stopped )); then
+    systemctl start filebeat || true
+  fi
+  if (( manager_stopped )); then
+    systemctl start wazuh-manager || true
+  fi
+}
+
+on_exit() {
+  local rc=$?
+  restart_ingestion
+  rm -rf "${security_work_dir:?}"
+  if (( rc != 0 )); then
+    notify "FAILED" "exit=${rc}; inspect journalctl -u sec1-wazuh-backup"
+  fi
+  exit "${rc}"
+}
+trap on_exit EXIT
+
+exec 9>"${lock_file}"
+flock -n 9 || { echo "A backup is already running" >&2; exit 1; }
+
+available_kib=$(df --output=avail "${backup_root}" | tail -1 | tr -d ' ')
+if (( available_kib < 8388608 )); then
+  echo "Less than 8 GiB is free on the backup staging disk" >&2
+  exit 1
+fi
+
+mkdir -p "${repository_dir}" "${work_dir}"
+rm -rf "${work_dir:?}"/*
+
+indexer -X PUT "${api}/_snapshot/${repository_name}" \
+  -H 'Content-Type: application/json' \
+  -d "{\"type\":\"fs\",\"settings\":{\"location\":\"${repository_dir}\",\"compress\":true}}" >/dev/null
+
+systemctl stop wazuh-manager
+manager_stopped=1
+sleep 5
+systemctl stop filebeat
+filebeat_stopped=1
+
+indexer -X POST "${api}/_refresh" >/dev/null
+snapshot_name="sec1-$(date -u +%Y%m%dt%H%M%Sz)"
+snapshot_result=$(indexer -X PUT \
+  "${api}/_snapshot/${repository_name}/${snapshot_name}?wait_for_completion=true" \
+  -H 'Content-Type: application/json' \
+  -d '{"indices":"*","ignore_unavailable":true,"include_global_state":true,"partial":false}')
+if [[ $(jq -r '.snapshot.state // "FAILED"' <<<"${snapshot_result}") != "SUCCESS" ]]; then
+  jq . <<<"${snapshot_result}" >&2
+  exit 1
+fi
+
+rm -rf "${security_work_dir:?}"
+install -d -o wazuh-indexer -g wazuh-indexer -m 0700 "${security_work_dir}"
+/usr/share/wazuh-indexer/bin/indexer-security-init.sh \
+  --options "-backup ${security_work_dir} -icl -nhnv" >/dev/null
+install -d -o root -g root -m 0700 "${work_dir}/indexer-security"
+rsync -a "${security_work_dir}/" "${work_dir}/indexer-security/"
+rm -rf "${security_work_dir:?}"
+
+paths=(
+  /etc/filebeat
+  /etc/wazuh-indexer
+  /etc/wazuh-dashboard
+  /etc/wazuh-recovery
+  /var/ossec/api/configuration
+  /var/ossec/etc
+  /var/ossec/queue/db
+  /var/ossec/queue/fts
+  /var/ossec/queue/rids
+  /var/ossec/queue/agent-info
+  /var/ossec/queue/agents-timestamp
+  /var/ossec/stats
+  /var/ossec/var/multigroups
+  /var/ossec/logs/alerts
+  /var/lib/sec1-malware/yara
+  /usr/share/wazuh-dashboard/data/wazuh/downloads
+  /usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml
+)
+existing_paths=()
+for path in "${paths[@]}"; do
+  [[ -e "${path}" ]] && existing_paths+=("${path}")
+done
+rsync -aR --acls --xattrs --numeric-ids "${existing_paths[@]}" "${work_dir}/files/"
+
+{
+  date -u +'%Y-%m-%dT%H:%M:%SZ'
+  hostnamectl
+  dpkg-query -W 'wazuh-*' 'filebeat' 2>/dev/null || true
+  echo "indexer_snapshot=${snapshot_name}"
+} >"${work_dir}/recovery-manifest.txt"
+(
+  cd "${work_dir}"
+  find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum
+) >"${work_dir}/SHA256SUMS"
+
+rm -rf "${manager_dir}.old"
+[[ -d "${manager_dir}" ]] && mv "${manager_dir}" "${manager_dir}.old"
+mv "${work_dir}" "${manager_dir}"
+
+restart_ingestion
+manager_stopped=0
+filebeat_stopped=0
+
+restic backup "${repository_dir}" "${manager_dir}" \
+  --host sec1 --tag wazuh --tag "${snapshot_name}"
+
+if [[ $(date +%u) == 7 ]]; then
+  restic forget --host sec1 --tag wazuh \
+    --keep-daily 14 --keep-weekly 8 --keep-monthly 12 --prune
+  restic check
+fi
+
+if [[ $(date +%d) == 01 ]]; then
+  subset=$((10#$(date +%m)))
+  restic check --read-data-subset="${subset}/12"
+fi
+
+mapfile -t obsolete_snapshots < <(
+  indexer "${api}/_snapshot/${repository_name}/_all" |
+    jq -r '.snapshots | sort_by(.end_time_in_millis) | reverse | .[2:][]?.snapshot'
+)
+for old_snapshot in "${obsolete_snapshots[@]}"; do
+  indexer -X DELETE "${api}/_snapshot/${repository_name}/${old_snapshot}" >/dev/null
+done
+
+notify "SUCCESS" "snapshot=${snapshot_name}"

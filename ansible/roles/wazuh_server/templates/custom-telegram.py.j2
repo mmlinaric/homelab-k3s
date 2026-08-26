@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""Send a concise Wazuh alert to the sec1 Telegram destination."""
+
+import json
+import sys
+import syslog
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+
+ENV_FILE = Path("/var/ossec/etc/telegram-alert.env")
+TELEGRAM_MESSAGE_LIMIT = 4096
+
+
+def load_credentials():
+    values = {}
+    for raw_line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, separator, raw_value = line.partition("=")
+        if not separator:
+            raise ValueError(f"invalid credential line for {key!r}")
+        values[key] = json.loads(raw_value)
+
+    token = values.get("TELEGRAM_BOT_TOKEN", "")
+    chat_id = values.get("TELEGRAM_CHAT_ID", "")
+    if not token or not chat_id:
+        raise ValueError("Telegram credentials are incomplete")
+    return token, chat_id
+
+
+def alert_message(alert):
+    rule = alert.get("rule", {})
+    agent = alert.get("agent", {})
+    level = rule.get("level", "?")
+    description = rule.get("description", "Wazuh alert")
+    rule_id = rule.get("id", "unknown")
+    source = agent.get("name") or alert.get("location") or "sec1"
+    event = str(alert.get("full_log") or alert.get("data") or "No event detail")
+
+    message = (
+        f"Wazuh alert L{level}: {description}\n"
+        f"Rule: {rule_id}\n"
+        f"Source: {source}\n"
+        f"Time: {alert.get('timestamp', 'unknown')}\n"
+        f"Event: {event}"
+    )
+    if len(message) >= TELEGRAM_MESSAGE_LIMIT:
+        message = message[: TELEGRAM_MESSAGE_LIMIT - 2] + "…"
+    return message, rule_id, level
+
+
+def main():
+    if len(sys.argv) < 2:
+        raise ValueError("Wazuh alert file argument is missing")
+
+    alert = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+    token, chat_id = load_credentials()
+    message, rule_id, level = alert_message(alert)
+    payload = urllib.parse.urlencode(
+        {"chat_id": chat_id, "text": message, "disable_web_page_preview": "true"}
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/sendMessage",
+        data=payload,
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            result = json.load(response)
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(f"Telegram API returned HTTP {error.code}") from error
+
+    if not result.get("ok"):
+        raise RuntimeError("Telegram API rejected the alert")
+
+    syslog.openlog("wazuh-telegram")
+    syslog.syslog(syslog.LOG_INFO, f"delivered rule={rule_id} level={level}")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as error:
+        syslog.openlog("wazuh-telegram")
+        syslog.syslog(syslog.LOG_ERR, f"delivery failed: {error}")
+        print(f"custom-telegram: {error}", file=sys.stderr)
+        raise SystemExit(1)

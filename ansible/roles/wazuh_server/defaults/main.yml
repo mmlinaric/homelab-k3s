@@ -1,0 +1,27 @@
+---
+wazuh_version: 4.14.7
+wazuh_install_script_url: https://packages.wazuh.com/4.14/wazuh-install.sh
+wazuh_install_script_sha256: 8ebe9514688ace8af9445805e8887cd491dd9f95fa9d421a70f0ea012ab06f3a
+wazuh_password_tool_url: https://packages.wazuh.com/4.14/wazuh-passwords-tool.sh
+wazuh_password_tool_sha256: 29ce567ce1bcb4629a34f3ccfcaec7463a5418bcdd0ee96db5e25dbc0340f8eb
+wazuh_dashboard_hostname: wazuh.mmlinaric.com
+wazuh_server_address: 192.168.60.20
+wazuh_backup_mount: /srv/wazuh-backup
+wazuh_backup_disk_serial: wazuh-backup
+wazuh_restic_version: 0.19.1
+wazuh_restic_sha256: f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c
+wazuh_restic_repository: "s3:{{ wazuh_s3_endpoint | regex_replace('/+$', '') }}/mmlinaric-homelab-wazuh/restic/sec1"
+wazuh_admin_sources:
+  - 192.168.90.2
+  - 192.168.90.3
+wazuh_agent_sources:
+  - 192.168.60.10
+  - 192.168.20.10
+  - 192.168.20.11
+wazuh_routeros_syslog_source: 192.168.20.1
+wazuh_routeros_syslog_port: 514
+wazuh_routeros_saved_search_id: routeros-security-events
+wazuh_routeros_dashboard_id: routeros-security-monitoring
+wazuh_kubernetes_saved_search_id: k3s-security-activity
+wazuh_kubernetes_dashboard_id: k3s-security-monitoring
+wazuh_yara_fim_rule_ids: 550,554

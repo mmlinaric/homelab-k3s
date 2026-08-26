@@ -1,0 +1,92 @@
+<group name="kubernetes_audit,k3s,">
+  <rule id="100200" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="apiVersion" type="pcre2">^audit\.k8s\.io/v1$</field>
+    <description>Kubernetes API audit event.</description>
+  </rule>
+
+  <rule id="100201" level="7">
+    <if_sid>100200</if_sid>
+    <field name="responseStatus.code" type="pcre2">^(?:401|403)$</field>
+    <description>Kubernetes API request was denied.</description>
+    <group>authentication_failed,</group>
+  </rule>
+
+  <rule id="100202" level="10">
+    <if_sid>100201</if_sid>
+    <field name="user.username" type="pcre2">^(?:oidc:|system:anonymous)</field>
+    <description>Kubernetes API request from an interactive or anonymous identity was denied.</description>
+    <group>authentication_failed,</group>
+  </rule>
+
+  <rule id="100203" level="10">
+    <if_sid>100200</if_sid>
+    <field name="objectRef.subresource" type="pcre2">^(?:exec|attach|portforward)$</field>
+    <description>Interactive access to a Kubernetes workload.</description>
+    <group>command_execution,</group>
+  </rule>
+
+  <rule id="100204" level="12">
+    <if_sid>100200</if_sid>
+    <field name="objectRef.resource" type="pcre2">^serviceaccounts$</field>
+    <field name="objectRef.subresource" type="pcre2">^token$</field>
+    <field name="user.username" type="pcre2">^(?:oidc:|system:admin$)</field>
+    <description>Interactive Kubernetes identity requested a service account token.</description>
+    <group>credential_access,</group>
+  </rule>
+
+  <rule id="100205" level="10">
+    <if_sid>100200</if_sid>
+    <field name="verb" type="pcre2">^(?:create|update|patch|delete|deletecollection)$</field>
+    <field name="objectRef.resource" type="pcre2">^(?:roles|rolebindings|clusterroles|clusterrolebindings)$</field>
+    <description>Kubernetes RBAC configuration was changed.</description>
+    <group>configuration_changed,privilege_escalation,</group>
+  </rule>
+
+  <rule id="100206" level="12">
+    <if_sid>100200</if_sid>
+    <field name="verb" type="pcre2">^(?:delete|deletecollection)$</field>
+    <field name="objectRef.resource" type="pcre2">^(?:namespaces|customresourcedefinitions)$</field>
+    <description>Critical Kubernetes API resource was deleted.</description>
+    <group>configuration_changed,</group>
+  </rule>
+
+  <rule id="100207" level="10">
+    <if_sid>100200</if_sid>
+    <field name="verb" type="pcre2">^(?:get|list|watch)$</field>
+    <field name="objectRef.resource" type="pcre2">^secrets$</field>
+    <field name="user.username" type="pcre2">^(?:oidc:|system:admin$)</field>
+    <description>Interactive Kubernetes identity accessed Secret metadata.</description>
+    <group>credential_access,</group>
+  </rule>
+
+  <rule id="100208" level="8">
+    <if_sid>100200</if_sid>
+    <field name="verb" type="pcre2">^(?:create|update|patch|delete|deletecollection)$</field>
+    <field name="objectRef.resource" type="pcre2">^(?:secrets|serviceaccounts)$</field>
+    <description>Kubernetes credential-bearing resource was changed.</description>
+    <group>configuration_changed,</group>
+  </rule>
+
+  <rule id="100211" level="0">
+    <if_sid>100200</if_sid>
+    <field name="user.username" type="pcre2">^system:serviceaccount:kube-system:namespace-controller$</field>
+    <field name="verb" type="pcre2">^(?:update|delete|deletecollection)$</field>
+    <description>Routine Kubernetes namespace finalization activity.</description>
+  </rule>
+
+  <rule id="100209" level="6">
+    <if_sid>100200</if_sid>
+    <field name="verb" type="pcre2">^(?:create|update|patch|delete|deletecollection)$</field>
+    <field name="objectRef.resource" type="pcre2">^(?:pods|deployments|daemonsets|statefulsets|jobs|cronjobs)$</field>
+    <description>Kubernetes workload was changed.</description>
+    <group>configuration_changed,</group>
+  </rule>
+
+  <rule id="100210" level="5">
+    <if_sid>100200</if_sid>
+    <field name="verb" type="pcre2">^(?:create|update|patch|delete|deletecollection)$</field>
+    <description>Kubernetes API resource was changed.</description>
+    <group>configuration_changed,</group>
+  </rule>
+</group>
