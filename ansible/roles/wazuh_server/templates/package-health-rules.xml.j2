@@ -1,0 +1,30 @@
+<group name="package_hygiene,">
+  <rule id="110510" level="3">
+    <decoded_as>sec1-package-status</decoded_as>
+    <description>Package and reboot posture reported.</description>
+  </rule>
+
+  <rule id="110511" level="5">
+    <if_sid>110510</if_sid>
+    <field name="package_pending" negate="yes">^0$</field>
+    <description>Host has $(package_pending) package updates pending.</description>
+  </rule>
+
+  <rule id="110512" level="8">
+    <if_sid>110511</if_sid>
+    <field name="security_updates" negate="yes">^0$</field>
+    <description>Host has $(security_updates) security-labelled package updates pending.</description>
+  </rule>
+
+  <rule id="110513" level="7">
+    <if_sid>110510</if_sid>
+    <field name="reboot_required">^1$</field>
+    <description>Host requires a reboot to run the newest installed kernel.</description>
+  </rule>
+
+  <rule id="110514" level="3">
+    <if_sid>110510</if_sid>
+    <field name="package_deferred" negate="yes">^0$</field>
+    <description>Host has $(package_deferred) package updates deferred by rollout policy.</description>
+  </rule>
+</group>

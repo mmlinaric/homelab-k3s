@@ -8,6 +8,9 @@
     <directories check_all="yes">/usr/local/bin,/usr/local/sbin</directories>
     <ignore>/etc/pve/.rrd</ignore>
     <ignore>/etc/pve/.vmlist</ignore>
+    <ignore>/etc/pve/nodes/pve1/lrm_status</ignore>
+    <ignore>/etc/pve/nodes/pve2/lrm_status</ignore>
+    <ignore type="sregex">^/etc/pve/nodes/pve[12]/lrm_status.tmp.[0-9]+$</ignore>
     <ignore type="sregex">.log$|.swp$</ignore>
     <skip_nfs>yes</skip_nfs>
   </syscheck>
@@ -29,5 +32,12 @@
     <scan_on_start>yes</scan_on_start>
     <interval>12h</interval>
   </sca>
+
+  <localfile>
+    <log_format>command</log_format>
+    <command>/usr/local/sbin/sec1-package-status</command>
+    <frequency>21600</frequency>
+    <alias>package-status</alias>
+  </localfile>
 
 </agent_config>

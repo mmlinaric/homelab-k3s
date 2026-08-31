@@ -1,0 +1,373 @@
+#!/usr/share/wazuh-dashboard/node/bin/node
+"use strict";
+
+/** Publish the operator cockpit using credentials already protected by the dashboard keystore. */
+
+const https = require("https");
+const { Keystore } = require(
+  "/usr/share/wazuh-dashboard/src/legacy/server/keystore/keystore.js"
+);
+
+const keystore = new Keystore(
+  "/etc/wazuh-dashboard/opensearch_dashboards.keystore"
+);
+const username = keystore.data["opensearch.username"];
+const password = keystore.data["opensearch.password"];
+
+if (!username || !password) {
+  throw new Error("dashboard service credentials are missing from the keystore");
+}
+
+const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+function indexReference(id) {
+  return [
+    {
+      name: "kibanaSavedObjectMeta.searchSourceJSON.index",
+      type: "index-pattern",
+      id,
+    },
+  ];
+}
+
+function saveObject(type, id, attributes, references = []) {
+  const payload = JSON.stringify({ attributes, references });
+  const options = {
+    hostname: "127.0.0.1",
+    port: 443,
+    path: `/api/saved_objects/${type}/${encodeURIComponent(id)}?overwrite=true`,
+    method: "POST",
+    // This connection never leaves sec1; authentication and payload stay on loopback.
+    rejectUnauthorized: false,
+    headers: {
+      Authorization: authorization,
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(payload),
+      "osd-xsrf": "ansible",
+      securitytenant: "global",
+    },
+  };
+
+  return new Promise((resolve, reject) => {
+    const request = https.request(options, (response) => {
+      let body = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => {
+        body += chunk;
+      });
+      response.on("end", () => {
+        if (response.statusCode === 200 || response.statusCode === 201) {
+          console.log(`published ${type}/${id}`);
+          resolve();
+          return;
+        }
+        reject(
+          new Error(
+            `dashboard rejected ${type}/${id}: HTTP ${response.statusCode} ${body.slice(0, 500)}`
+          )
+        );
+      });
+    });
+    request.on("error", reject);
+    request.write(payload);
+    request.end();
+  });
+}
+
+function searchAttributes(title, description, query, columns, sort) {
+  return {
+    title,
+    description,
+    hits: 0,
+    columns,
+    sort,
+    version: 1,
+    kibanaSavedObjectMeta: {
+      searchSourceJSON: JSON.stringify({
+        query: { query, language: "kuery" },
+        filter: [],
+        highlightAll: true,
+        version: true,
+        indexRefName: "kibanaSavedObjectMeta.searchSourceJSON.index",
+      }),
+    },
+  };
+}
+
+function metricAttributes(title, description, label, query) {
+  return {
+    title,
+    description,
+    uiStateJSON: "{}",
+    version: 1,
+    visState: JSON.stringify({
+      title,
+      type: "metric",
+      params: {
+        addTooltip: true,
+        addLegend: false,
+        type: "metric",
+        metric: {
+          percentageMode: false,
+          useRanges: false,
+          colorSchema: "Green to Red",
+          metricColorMode: "None",
+          colorsRange: [{ from: 0, to: 10000 }],
+          labels: { show: true },
+          invertColors: false,
+          style: {
+            bgFill: "#000",
+            bgColor: false,
+            labelColor: false,
+            subText: label,
+            fontSize: 46,
+          },
+        },
+      },
+      aggs: [
+        {
+          id: "1",
+          enabled: true,
+          type: "count",
+          schema: "metric",
+          params: {},
+        },
+      ],
+    }),
+    kibanaSavedObjectMeta: {
+      searchSourceJSON: JSON.stringify({
+        query: { query, language: "kuery" },
+        filter: [],
+        indexRefName: "kibanaSavedObjectMeta.searchSourceJSON.index",
+      }),
+    },
+  };
+}
+
+async function main() {
+  const searches = [
+    {
+      id: "{{ wazuh_cockpit_attention_search_id }}",
+      title: "Needs Attention",
+      description: "High-severity events excluding verified benign and routine platform churn",
+      query:
+        "rule.level >= 7 and not rule.groups: audit_benign and not rule.groups: sca and not rule.id: (510 or 550 or 553 or 2902 or 2904 or 80710)",
+      columns: [
+        "timestamp",
+        "rule.level",
+        "rule.description",
+        "agent.name",
+        "data.user.username",
+        "data.sourceIPs",
+      ],
+    },
+    {
+      id: "{{ wazuh_cockpit_health_search_id }}",
+      title: "Monitoring, Patch and Scanner Health",
+      description: "Security sensor, package, reboot, malware scanner, and sustained network failures",
+      query: "rule.id: (504 or 100110 or 110502 or 110503 or 110511 or 110512 or 110513 or 110514)",
+      columns: [
+        "timestamp",
+        "rule.level",
+        "rule.description",
+        "agent.name",
+        "data.package_pending",
+        "data.package_deferred",
+        "data.security_updates",
+        "data.reboot_required",
+        "full_log",
+      ],
+    },
+    {
+      id: "{{ wazuh_cockpit_auth_search_id }}",
+      title: "Authentication Failures",
+      description: "Failed authentication across hosts, Kubernetes, and RouterOS",
+      query: "rule.groups: authentication_failed",
+      columns: [
+        "timestamp",
+        "rule.level",
+        "rule.description",
+        "agent.name",
+        "data.srcip",
+        "data.user.username",
+        "full_log",
+      ],
+    },
+    {
+      id: "{{ wazuh_cockpit_changes_search_id }}",
+      title: "Important Change Trail",
+      description: "Configuration, RBAC, package, and file integrity changes",
+      query:
+        "rule.groups: configuration_changed or rule.id: (550 or 553 or 554 or 100104)",
+      columns: [
+        "timestamp",
+        "rule.level",
+        "rule.description",
+        "agent.name",
+        "syscheck.path",
+        "data.user.username",
+        "data.objectRef.resource",
+      ],
+    },
+    {
+      id: "{{ wazuh_cockpit_vulnerability_search_id }}",
+      title: "Critical and High Vulnerabilities",
+      description: "Current endpoint vulnerability state, separate from event alert severity",
+      query:
+        "vulnerability.severity: (Critical or High) and not vulnerability.under_evaluation: true",
+      columns: [
+        "agent.name",
+        "vulnerability.severity",
+        "vulnerability.score.base",
+        "vulnerability.id",
+        "package.name",
+        "package.version",
+        "vulnerability.scanner.condition",
+        "vulnerability.reference",
+      ],
+      sort: [["vulnerability.score.base", "desc"]],
+      indexId: "wazuh-states-vulnerabilities-*",
+    },
+  ];
+
+  for (const search of searches) {
+    await saveObject(
+      "search",
+      search.id,
+      searchAttributes(
+        search.title,
+        search.description,
+        search.query,
+        search.columns,
+        search.sort || [["timestamp", "desc"]]
+      ),
+      indexReference(search.indexId || "wazuh-alerts-*")
+    );
+  }
+
+  const metrics = [
+    {
+      id: "homelab-critical-count",
+      title: "Critical Security Alerts",
+      description: "Level 10 and higher in the selected time range",
+      label: "L10+",
+      query: "rule.level >= 10",
+    },
+    {
+      id: "homelab-monitoring-failure-count",
+      title: "Monitoring Failures",
+      description: "Scanner, sensor, and sustained WireGuard failures",
+      label: "failures",
+      query: "rule.id: (504 or 100110 or 110502 or 110503)",
+    },
+    {
+      id: "homelab-auth-failure-count",
+      title: "Authentication Failures",
+      description: "Authentication failures in the selected time range",
+      label: "failures",
+      query: "rule.groups: authentication_failed",
+    },
+    {
+      id: "homelab-change-count",
+      title: "Configuration Changes",
+      description: "Classified configuration changes in the selected time range",
+      label: "changes",
+      query: "rule.groups: configuration_changed",
+    },
+    {
+      id: "homelab-critical-vulnerability-count",
+      title: "Critical Vulnerabilities",
+      description: "Current critical endpoint vulnerability records",
+      label: "critical CVEs",
+      query: "vulnerability.severity: Critical and not vulnerability.under_evaluation: true",
+      indexId: "wazuh-states-vulnerabilities-*",
+    },
+    {
+      id: "homelab-high-vulnerability-count",
+      title: "High Vulnerabilities",
+      description: "Current high-severity endpoint vulnerability records",
+      label: "high CVEs",
+      query: "vulnerability.severity: High and not vulnerability.under_evaluation: true",
+      indexId: "wazuh-states-vulnerabilities-*",
+    },
+  ];
+
+  for (const metric of metrics) {
+    await saveObject(
+      "visualization",
+      metric.id,
+      metricAttributes(
+        metric.title,
+        metric.description,
+        metric.label,
+        metric.query
+      ),
+      indexReference(metric.indexId || "wazuh-alerts-*")
+    );
+  }
+
+  const panels = [
+    [7, 8, 0, 0, "visualization", "homelab-critical-count"],
+    [7, 8, 8, 0, "visualization", "homelab-critical-vulnerability-count"],
+    [7, 8, 16, 0, "visualization", "homelab-high-vulnerability-count"],
+    [7, 8, 24, 0, "visualization", "homelab-monitoring-failure-count"],
+    [7, 8, 32, 0, "visualization", "homelab-auth-failure-count"],
+    [7, 8, 40, 0, "visualization", "homelab-change-count"],
+    [18, 24, 0, 7, "search", "{{ wazuh_cockpit_attention_search_id }}"],
+    [18, 24, 24, 7, "search", "{{ wazuh_cockpit_vulnerability_search_id }}"],
+    [18, 24, 0, 25, "search", "{{ wazuh_cockpit_health_search_id }}"],
+    [18, 24, 24, 25, "search", "{{ wazuh_cockpit_auth_search_id }}"],
+    [18, 48, 0, 43, "search", "{{ wazuh_cockpit_changes_search_id }}"],
+  ];
+  const references = panels.map((panel, index) => ({
+    name: `panel_${index}`,
+    type: panel[4],
+    id: panel[5],
+  }));
+  const panelsJSON = JSON.stringify(
+    panels.map((panel, index) => ({
+      embeddableConfig: {},
+      gridData: {
+        h: panel[0],
+        i: String(index + 1),
+        w: panel[1],
+        x: panel[2],
+        y: panel[3],
+      },
+      panelIndex: String(index + 1),
+      version: "2.19.5",
+      panelRefName: `panel_${index}`,
+    }))
+  );
+
+  await saveObject(
+    "dashboard",
+    "{{ wazuh_cockpit_dashboard_id }}",
+    {
+      title: "Homelab Security Cockpit",
+      description: "Action-oriented security and monitoring overview for the homelab",
+      hits: 0,
+      panelsJSON,
+      optionsJSON: JSON.stringify({
+        useMargins: true,
+        hidePanelTitles: false,
+      }),
+      version: 1,
+      timeRestore: true,
+      timeFrom: "now-24h",
+      timeTo: "now",
+      refreshInterval: { pause: true, value: 60000 },
+      kibanaSavedObjectMeta: {
+        searchSourceJSON: JSON.stringify({
+          query: { query: "", language: "kuery" },
+          filter: [],
+        }),
+      },
+    },
+    references
+  );
+}
+
+main().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});

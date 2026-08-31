@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Send a concise Wazuh alert to the sec1 Telegram destination."""
+"""Send an actionable Wazuh alert to the sec1 Telegram destination."""
 
 import json
 import sys
 import syslog
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -12,6 +13,62 @@ from pathlib import Path
 
 ENV_FILE = Path("/var/ossec/etc/telegram-alert.env")
 TELEGRAM_MESSAGE_LIMIT = 4096
+DASHBOARD_URL = "https://{{ wazuh_dashboard_hostname }}"
+
+GUIDANCE = {
+    "100101": (
+        "A RouterOS login failed and may indicate a bad credential or an unexpected management client.",
+        "Verify the username and source address. If neither is yours, review RouterOS sessions and rotate the account credential.",
+    ),
+    "100110": (
+        "The Pixel WireGuard peer failed at least 120 handshakes in ten minutes.",
+        "Check the phone's connectivity and WireGuard endpoint. No action is needed if the phone was intentionally offline.",
+    ),
+    "100202": (
+        "An interactive or anonymous Kubernetes identity was denied by the API server.",
+        "Verify the identity and source IP, then inspect adjacent Kubernetes audit events.",
+    ),
+    "100203": (
+        "A non-approved identity used exec, attach, or port-forward against a workload.",
+        "Confirm the user and pod. If unexpected, preserve the audit trail and rotate the identity's credentials.",
+    ),
+    "100204": (
+        "An interactive identity requested a Kubernetes service-account token.",
+        "Confirm this was an approved administrative action and review how the token was used.",
+    ),
+    "100205": (
+        "Kubernetes RBAC changed outside the narrowly approved controller exceptions.",
+        "Compare the actor and object with GitOps. Revert unauthorized privilege changes through the source repository.",
+    ),
+    "100206": (
+        "A namespace or CustomResourceDefinition was deleted.",
+        "Confirm the deletion in GitOps and check affected workloads and backups immediately.",
+    ),
+    "100207": (
+        "An interactive identity accessed Kubernetes Secret metadata.",
+        "Confirm the identity and source. Rotate affected credentials if the access was unexpected.",
+    ),
+    "100208": (
+        "A Secret or service account changed outside the routine status exceptions.",
+        "Compare the change with Argo CD and confirm the responsible controller or administrator.",
+    ),
+    "110500": (
+        "YARA matched a suspicious file.",
+        "Do not delete it yet. Isolate the host if needed, preserve the file and surrounding logs, then validate the signature.",
+    ),
+    "110501": (
+        "ClamAV detected malware.",
+        "Isolate the host if needed, preserve the file and logs, and verify the detection before quarantine or deletion.",
+    ),
+    "110502": (
+        "A scheduled ClamAV scan did not complete reliably.",
+        "Run systemctl status sec1-clamav-scan.service and inspect its journal on the named host.",
+    ),
+    "110503": (
+        "The scheduled YARA rules update failed, leaving the previous verified rules active.",
+        "Inspect sec1-yara-update.service and its journal on the named host.",
+    ),
+}
 
 
 def load_credentials():
@@ -39,18 +96,80 @@ def alert_message(alert):
     description = rule.get("description", "Wazuh alert")
     rule_id = rule.get("id", "unknown")
     source = agent.get("name") or alert.get("location") or "sec1"
-    event = str(alert.get("full_log") or alert.get("data") or "No event detail")
+    data = alert.get("data", {})
+    user = data.get("user", {}) if isinstance(data, dict) else {}
+    object_ref = data.get("objectRef", {}) if isinstance(data, dict) else {}
+    response = data.get("responseStatus", {}) if isinstance(data, dict) else {}
+    identity = user.get("username") or data.get("dstuser") or data.get("srcuser")
+    source_ips = data.get("sourceIPs") or data.get("srcip")
+    if isinstance(source_ips, list):
+        source_ips = ", ".join(str(value) for value in source_ips)
 
-    message = (
-        f"Wazuh alert L{level}: {description}\n"
-        f"Rule: {rule_id}\n"
-        f"Source: {source}\n"
-        f"Time: {alert.get('timestamp', 'unknown')}\n"
-        f"Event: {event}"
+    object_parts = [
+        object_ref.get("namespace"),
+        object_ref.get("resource"),
+        object_ref.get("name"),
+        object_ref.get("subresource"),
+    ]
+    object_name = "/".join(str(value) for value in object_parts if value)
+    outcome = response.get("code") or response.get("status")
+    why, next_step = GUIDANCE.get(
+        str(rule_id),
+        (
+            "Wazuh classified this event as high severity.",
+            "Verify the actor and source, then inspect events from the same host within five minutes of this timestamp.",
+        ),
+    )
+
+    details = []
+    if identity:
+        details.append(f"Identity: {identity}")
+    if source_ips:
+        details.append(f"Origin: {source_ips}")
+    if data.get("verb") or object_name:
+        details.append(f"Object: {data.get('verb', '')} {object_name}".strip())
+    if outcome:
+        details.append(f"Outcome: {outcome}")
+    if not details:
+        event = str(alert.get("full_log") or data or "No event detail")
+        details.append(f"Event: {event[:900]}")
+
+    message = "\n".join(
+        [
+            f"Wazuh action required · L{level}",
+            description,
+            "",
+            f"Host: {source}",
+            f"Time: {alert.get('timestamp', 'unknown')}",
+            *details,
+            "",
+            f"Why it matters: {why}",
+            f"Next step: {next_step}",
+            f"Investigate: {DASHBOARD_URL}",
+            f"Rule: {rule_id}",
+        ]
     )
     if len(message) >= TELEGRAM_MESSAGE_LIMIT:
         message = message[: TELEGRAM_MESSAGE_LIMIT - 2] + "…"
     return message, rule_id, level
+
+
+def telegram_request(request):
+    for attempt in range(2):
+        try:
+            with urllib.request.urlopen(request, timeout=15) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as error:
+            if error.code != 429 or attempt:
+                raise RuntimeError(f"Telegram API returned HTTP {error.code}") from error
+            try:
+                body = json.loads(error.read().decode("utf-8"))
+                retry_after = int(body.get("parameters", {}).get("retry_after", 1))
+            except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                retry_after = 1
+            time.sleep(min(max(retry_after, 1), 45))
+
+    raise RuntimeError("Telegram API retry was exhausted")
 
 
 def main():
@@ -69,11 +188,7 @@ def main():
         method="POST",
     )
 
-    try:
-        with urllib.request.urlopen(request, timeout=15) as response:
-            result = json.load(response)
-    except urllib.error.HTTPError as error:
-        raise RuntimeError(f"Telegram API returned HTTP {error.code}") from error
+    result = telegram_request(request)
 
     if not result.get("ok"):
         raise RuntimeError("Telegram API rejected the alert")

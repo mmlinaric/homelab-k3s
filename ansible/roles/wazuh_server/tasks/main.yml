@@ -469,12 +469,32 @@
     group: wazuh
     mode: '0660'
   notify: Restart Wazuh manager
-  tags: [routeros_syslog]
+  tags: [noise_tuning, routeros_syslog]
 
 - name: Install Kubernetes API audit alert rules
   ansible.builtin.template:
     src: kubernetes-audit-rules.xml.j2
     dest: /var/ossec/etc/rules/kubernetes_audit_rules.xml
+    owner: root
+    group: wazuh
+    mode: '0660'
+  notify: Restart Wazuh manager
+  tags: [kubernetes_audit, noise_tuning]
+
+- name: Install verified rootcheck noise tuning rules
+  ansible.builtin.template:
+    src: rootcheck-noise-rules.xml.j2
+    dest: /var/ossec/etc/rules/rootcheck_noise_rules.xml
+    owner: root
+    group: wazuh
+    mode: '0660'
+  notify: Restart Wazuh manager
+  tags: [noise_tuning]
+
+- name: Install K3s CNI audit alert tuning rules
+  ansible.builtin.template:
+    src: k3s-cni-audit-rules.xml.j2
+    dest: /var/ossec/etc/rules/k3s_cni_audit_rules.xml
     owner: root
     group: wazuh
     mode: '0660'
@@ -519,9 +539,9 @@
     owner: root
     group: wazuh
     mode: '0750'
-  tags: [telegram_alerts]
+  tags: [operator_experience, telegram_alerts]
 
-- name: Enable Telegram notifications for Wazuh level 10 and higher
+- name: Enable actionable Telegram notifications
   ansible.builtin.blockinfile:
     path: /var/ossec/etc/ossec.conf
     marker: '<!-- {mark} ANSIBLE MANAGED TELEGRAM ALERTS -->'
@@ -532,8 +552,41 @@
           <level>10</level>
           <alert_format>json</alert_format>
         </integration>
+        <integration>
+          <name>custom-telegram</name>
+          <rule_id>{{ wazuh_actionable_telegram_rule_ids | join(',') }}</rule_id>
+          <alert_format>json</alert_format>
+        </integration>
   notify: Restart Wazuh manager
-  tags: [telegram_alerts]
+  tags: [operator_experience, telegram_alerts]
+
+- name: Install the weekly Wazuh operator digest
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - src: wazuh-weekly-digest.py.j2
+      dest: /usr/local/sbin/wazuh-weekly-digest
+      mode: '0750'
+    - src: wazuh-weekly-digest.service.j2
+      dest: /etc/systemd/system/wazuh-weekly-digest.service
+      mode: '0644'
+    - src: wazuh-weekly-digest.timer.j2
+      dest: /etc/systemd/system/wazuh-weekly-digest.timer
+      mode: '0644'
+  notify: Reload systemd
+  tags: [operator_experience]
+
+- name: Enable the weekly Wazuh operator digest
+  ansible.builtin.systemd_service:
+    name: wazuh-weekly-digest.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  tags: [operator_experience]
 
 - name: Add high-signal paths to sec1 file integrity monitoring
   ansible.builtin.lineinfile:
@@ -551,7 +604,49 @@
     group: wazuh
     mode: '0640'
   notify: Restart Wazuh manager
-  tags: [malware_detection]
+  tags: [malware_detection, operator_experience]
+
+- name: Install package posture decoders and rules
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: wazuh
+    mode: '0640'
+  loop:
+    - src: package-health-decoders.xml.j2
+      dest: /var/ossec/etc/decoders/package_health_decoders.xml
+    - src: package-health-rules.xml.j2
+      dest: /var/ossec/etc/rules/package_health_rules.xml
+  notify: Restart Wazuh manager
+  tags: [operator_experience, package_hygiene]
+
+- name: Include sec1 in vulnerability detection
+  ansible.builtin.lineinfile:
+    path: /var/ossec/etc/local_internal_options.conf
+    regexp: '^vulnerability-detection\.disable_scan_manager='
+    line: 'vulnerability-detection.disable_scan_manager=0'
+    create: true
+    owner: root
+    group: wazuh
+    mode: '0640'
+  notify: Restart Wazuh manager
+  tags: [operator_experience, package_hygiene]
+
+- name: Monitor local package and reboot posture
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: '<!-- {mark} ANSIBLE MANAGED PACKAGE POSTURE -->'
+    insertbefore: '</ossec_config>'
+    block: |2
+        <localfile>
+          <log_format>command</log_format>
+          <command>/usr/local/sbin/sec1-package-status</command>
+          <frequency>21600</frequency>
+          <alias>package-status</alias>
+        </localfile>
+  notify: Restart Wazuh manager
+  tags: [operator_experience, package_hygiene]
 
 - name: Trigger local YARA scans for new and modified FIM files
   ansible.builtin.blockinfile:
@@ -721,6 +816,22 @@
   no_log: true
   tags: [kubernetes_audit, dashboard_objects]
 
+- name: Install the homelab security cockpit publisher
+  ansible.builtin.template:
+    src: wazuh-dashboard-cockpit.js.j2
+    dest: /usr/local/sbin/sec1-wazuh-dashboard-cockpit
+    owner: root
+    group: root
+    mode: '0700'
+  tags: [dashboard_objects, operator_experience]
+
+- name: Publish the homelab security cockpit
+  ansible.builtin.command: /usr/local/sbin/sec1-wazuh-dashboard-cockpit
+  register: wazuh_cockpit_publish
+  changed_when: false
+  no_log: true
+  tags: [dashboard_objects, operator_experience]
+
 - name: Register declarative Wazuh agent groups
   ansible.builtin.command:
     argv:
@@ -760,7 +871,19 @@
     - linux-server
     - proxmox
   notify: Restart Wazuh manager
-  tags: [kubernetes_audit, malware_detection]
+  tags: [agent_policy, kubernetes_audit, malware_detection, noise_tuning, operator_experience, package_hygiene]
+
+- name: Preserve rootcheck signatures in declarative agent groups
+  ansible.builtin.copy:
+    src: "/var/ossec/etc/shared/default/{{ item.1 }}"
+    dest: "/var/ossec/etc/shared/{{ item.0 }}/{{ item.1 }}"
+    remote_src: true
+    owner: wazuh
+    group: wazuh
+    mode: '0660'
+  loop: "{{ ['linux-server', 'proxmox'] | product(['rootkit_files.txt', 'rootkit_trojans.txt']) | list }}"
+  notify: Restart Wazuh manager
+  tags: [agent_policy, noise_tuning, operator_experience, package_hygiene]
 
 - name: Create backup and repository directories
   ansible.builtin.file:

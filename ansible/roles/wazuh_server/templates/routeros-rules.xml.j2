@@ -56,4 +56,17 @@
     <description>RouterOS firewall event.</description>
     <group>firewall,</group>
   </rule>
+
+  <rule id="100109" level="1">
+    <if_sid>100100</if_sid>
+    <regex type="pcre2">(?i)wireguard,info\s+routeros\s*:\s*wireguard1:\s*\[Mario's Pixel 9\].*Handshake for peer did not complete after 5 seconds, retrying</regex>
+    <description>Expected WireGuard retry while the Pixel peer is unreachable.</description>
+    <group>routeros_noise,wireguard_retry,</group>
+  </rule>
+
+  <rule id="100110" level="7" frequency="120" timeframe="600" ignore="3600">
+    <if_matched_sid>100109</if_matched_sid>
+    <description>RouterOS Pixel WireGuard peer has sustained handshake failures.</description>
+    <group>network_availability,wireguard_retry,</group>
+  </rule>
 </group>

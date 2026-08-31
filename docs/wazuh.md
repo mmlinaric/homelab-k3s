@@ -127,13 +127,91 @@ only for firewall rules that explicitly have logging enabled. Normal DNS
 queries are not forwarded; DNS warnings and errors remain covered by the
 severity selectors.
 
-### Alerting and RouterOS investigation
+The expected handshake retry from the intermittently connected Pixel 9
+WireGuard peer is classified at level 1. If it repeats 120 times within ten
+minutes, Wazuh emits one level-7 availability alert and then suppresses repeat
+alerts for one hour. Authentication failures and failures for other peers keep
+their original severity.
+
+### Alerting and operator workflow
 
 Wazuh sends every level 10 or higher alert to the same dedicated Telegram
 destination used for backup status. The manager invokes the managed
 `custom-telegram` integration with the alert in JSON format. Its root-owned
 credential file is group-readable only by Wazuh; tokens are supplied from
 Bitwarden Secrets Manager and never stored in Git.
+
+Four lower-severity events are also sent because they represent monitoring
+failure rather than ordinary security severity: a sustained WireGuard outage,
+a credential-bearing Kubernetes object change, a failed ClamAV scan, and a
+failed YARA rules update. Telegram messages summarize what happened, why it
+matters, and the next investigation step instead of forwarding an unformatted
+JSON event. Agent restart/disconnect events remain in the monitoring-health
+view and weekly digest so routine maintenance does not page the operator.
+Both immediate alerts and the weekly digest honor Telegram's bounded
+`retry_after` response once, preventing a transient rate limit from silently
+discarding a notification.
+
+Use `Homelab Security Cockpit` as the normal Wazuh entry point:
+
+`https://wazuh.mmlinaric.com/app/dashboards#/view/homelab-security-cockpit`
+
+It opens on the previous 24 hours and contains six counters plus five working
+queues: `Needs Attention`, `Critical and High Vulnerabilities`, `Monitoring,
+Patch and Scanner Health`, `Authentication Failures`, and `Important Change
+Trail`. `Critical Security Alerts` is an event count for the selected time
+range. It is deliberately separate from the current `Critical
+Vulnerabilities` and `High Vulnerabilities` inventory counters, so a quiet
+alert period cannot be mistaken for fully patched hosts. The intended workflow
+is:
+
+1. Treat Telegram as the inbox. Open Wazuh only for an immediate notification
+   that needs context, or when the weekly digest shows a non-zero category.
+2. Start with `Needs Attention`, then use the matching queue to identify the
+   host, identity, source address, affected object, package, and original
+   event. Review the vulnerability queue separately even when the alert count
+   is zero.
+3. Change the time picker or add a host/identity filter to establish whether
+   the event is isolated or repeated. Use Wazuh's stock dashboards only for
+   deeper host, compliance, or event-specific investigation.
+4. Record or fix the cause. Tune a rule only after its exact provenance and
+   outcome are proven routine; do not suppress an entire event family.
+
+Every Sunday at 09:00, with up to 30 minutes of jitter, `sec1` sends a weekly
+operator digest. It reports agent and core-service health, actionable and
+critical events, authentication/configuration/FIM activity, malware and
+monitoring failures, successful ClamAV evidence, current Critical/High
+vulnerability records, vulnerability coverage, and package/reboot posture for
+all five hosts. Counts under the alert heading cover the preceding seven days,
+so historical events retain their old severity until they age out after a
+tuning change. Vulnerability counts are current inventory records, not unique
+CVEs: the same CVE can appear for multiple installed package versions, and old
+installed kernel packages can dominate the total even when APT has no pending
+updates. Use the vulnerability queue's host, package version, condition, and
+reference fields to decide what is actually remediable.
+
+Each host runs `/usr/local/sbin/sec1-package-status` every six hours through
+its Wazuh log collector. The latest report records the number of actionable
+APT updates, updates deferred by Ubuntu's phased rollout, security-labelled
+updates, and whether the running kernel trails the newest installed kernel.
+Deferred updates are informational; they remain visible without being treated
+as a patch failure. Non-zero results appear in `Monitoring, Patch and Scanner
+Health`; missing reports lower the weekly digest's reporting coverage. The
+manager's own vulnerability scan is explicitly enabled so `sec1` is not a
+coverage blind spot.
+
+Preview the digest without sending or trigger it immediately with:
+
+```bash
+sudo /usr/local/sbin/wazuh-weekly-digest
+sudo systemctl start wazuh-weekly-digest.service
+systemctl list-timers wazuh-weekly-digest.timer
+```
+
+The summary is deterministic and processes alert metadata only on `sec1`.
+External AI summarization is deliberately disabled until a provider, data
+boundary, cost limit, and failure behavior are explicitly approved. The
+operator workflow does not depend on AI to classify or deliver alerts.
 
 To reconcile only this integration after a normal full deployment, keep the
 existing credential file or inject the two Telegram values and run:
@@ -143,6 +221,8 @@ bws run --project-id '<wazuh-project-id>' -- \
   'ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/wazuh.yml \
   --limit sec1 --tags telegram_alerts'
 ```
+
+### RouterOS investigation
 
 The Wazuh dashboard contains the saved search `RouterOS Security Events` and
 dashboard `RouterOS Security Monitoring`. Both use the filter
@@ -169,6 +249,21 @@ agent connection. Custom rules raise denied interactive requests, pod
 interactive Secret access, and deletion of namespaces or CRDs. Rules at level
 10 and higher also use the managed Telegram integration.
 
+Known controller provenance is handled below the indexed alert threshold for
+successful TokenReviews, control-plane Secret watches, K3s node status,
+Prometheus service reconciliation, External Secrets status, and the Velero
+namespace's backup workload lifecycle. A CloudNativePG RoleBinding create that
+returns `409 AlreadyExists`, and `keycloak-db` patching its own CloudNativePG
+status, are also routine. Approved Forgejo and Velero backup hooks remain
+searchable at level 3. Equivalent events from any other identity, namespace,
+resource, or response outcome retain the original severity.
+
+K3s bridge-CNI attach and teardown records for ephemeral `veth*` interfaces are
+retained at level 3, rather than notifying. This narrowly handles the expected
+`prom=256 old_prom=0` and `prom=0 old_prom=256` transitions emitted by K3s's
+hashed CNI binary running as `bridge`; alerts for non-veth devices, unexpected
+transitions, and other executables remain unchanged.
+
 Reconcile the K3s side without bootstrap secrets, then apply the Wazuh role in
 the normal BWS-backed deployment:
 
@@ -186,13 +281,15 @@ at `https://wazuh.mmlinaric.com/app/dashboards#/view/k3s-security-monitoring`.
 
 ### Endpoint malware detection
 
-`sec1`, `k3s-01`, `pve1`, and `pve2` use two complementary local scanners.
+`sec1`, `k3s-01`, `ops1`, `pve1`, and `pve2` use two complementary local scanners.
 Wazuh FIM triggers YARA whenever a monitored system or `/root` file is
 created or modified. A daily low-priority ClamAV scan covers `/etc`,
 `/usr/local/bin`, `/usr/local/sbin`, `/root`, `/home`, `/tmp`, and `/var/tmp`.
 The scanner considers regular files only, stays on the originating filesystem,
 and skips user cache trees. It therefore does not recurse into Proxmox VM
 storage, K3s container layers, Wazuh index data, or backup mounts.
+Temporary files which disappear while `/tmp` or `/var/tmp` is being scanned do
+not fail the service; inaccessible files that still exist remain scan errors.
 
 ClamAV's `freshclam` service maintains the official signed malware database.
 The scan uses the non-resident `clamscan` executable, avoiding roughly 1 GiB of
@@ -214,6 +311,13 @@ YARA and ClamAV detections are Wazuh level 12 and therefore notify Telegram.
 Scanner and updater failures are level 7. No file is deleted or quarantined
 automatically; investigate the host and isolate it before taking destructive
 action.
+
+Rootcheck's legacy string heuristic is reduced to level 1 for the exact
+`cat`, `chgrp`, `chmod`, `chown`, `date`, `echo`, `env`, `ls`, `md5sum`, and
+`uname` paths supplied by Ubuntu's verified `rust-coreutils` package. Other
+rootcheck detections remain level 7. Proxmox FIM likewise ignores only the HA
+manager's generated `lrm_status` and `lrm_status.tmp.<pid>` files; the rest of
+`/etc/pve` remains monitored in real time.
 
 Useful commands:
 

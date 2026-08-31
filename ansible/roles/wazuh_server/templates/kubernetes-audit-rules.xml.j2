@@ -89,4 +89,107 @@
     <description>Kubernetes API resource was changed.</description>
     <group>configuration_changed,</group>
   </rule>
+
+  <!-- Keep high-severity defaults for unknown identities.  These children only
+       demote exact, observed controller and scheduled-backup activity. -->
+  <rule id="100213" level="1">
+    <if_sid>100205</if_sid>
+    <field name="user.username" type="pcre2">^system:serviceaccount:cnpg-system:cloudnative-pg$</field>
+    <field name="verb" type="pcre2">^create$</field>
+    <field name="objectRef.resource" type="pcre2">^rolebindings$</field>
+    <field name="responseStatus.code" type="pcre2">^409$</field>
+    <description>CloudNativePG found its existing RoleBinding during reconciliation.</description>
+    <group>audit_benign,controller_reconciliation,</group>
+  </rule>
+
+  <rule id="100214" level="3">
+    <if_sid>100203</if_sid>
+    <field name="user.username" type="pcre2">^system:serviceaccount:forgejo:forgejo-backup$</field>
+    <field name="objectRef.namespace" type="pcre2">^forgejo$</field>
+    <field name="objectRef.subresource" type="pcre2">^exec$</field>
+    <description>Forgejo scheduled backup executed its database workflow.</description>
+    <group>audit_benign,scheduled_backup,</group>
+  </rule>
+
+  <rule id="100215" level="3">
+    <if_sid>100203</if_sid>
+    <field name="user.username" type="pcre2">^system:serviceaccount:velero:velero-server$</field>
+    <field name="objectRef.namespace" type="pcre2">^(?:forgejo|dependency-track|keycloak)$</field>
+    <field name="objectRef.subresource" type="pcre2">^exec$</field>
+    <description>Velero executed an approved application backup hook.</description>
+    <group>audit_benign,scheduled_backup,</group>
+  </rule>
+
+  <rule id="100216" level="1">
+    <if_sid>100200</if_sid>
+    <field name="user.username" type="pcre2">^(?:system:k3s-supervisor|system:kube-controller-manager|system:apiserver)$</field>
+    <field name="verb" type="pcre2">^(?:get|watch)$</field>
+    <field name="objectRef.resource" type="pcre2">^secrets$</field>
+    <field name="responseStatus.code" type="pcre2">^200$</field>
+    <description>Routine control-plane Secret metadata watch.</description>
+    <group>audit_benign,controller_reconciliation,</group>
+  </rule>
+
+  <rule id="100217" level="1">
+    <if_sid>100210</if_sid>
+    <field name="verb" type="pcre2">^create$</field>
+    <field name="objectRef.resource" type="pcre2">^tokenreviews$</field>
+    <field name="responseStatus.code" type="pcre2">^201$</field>
+    <description>Routine Kubernetes TokenReview request.</description>
+    <group>audit_benign,authentication_service,</group>
+  </rule>
+
+  <rule id="100218" level="1">
+    <if_sid>100210</if_sid>
+    <field name="user.username" type="pcre2">^(?:system:k3s-supervisor|system:node:k3s-01)$</field>
+    <field name="verb" type="pcre2">^(?:patch|update)$</field>
+    <field name="objectRef.resource" type="pcre2">^nodes$</field>
+    <field name="objectRef.name" type="pcre2">^k3s-01$</field>
+    <field name="responseStatus.code" type="pcre2">^200$</field>
+    <description>Routine K3s node status reconciliation.</description>
+    <group>audit_benign,controller_reconciliation,</group>
+  </rule>
+
+  <rule id="100219" level="1">
+    <if_sid>100210</if_sid>
+    <field name="user.username" type="pcre2">^system:serviceaccount:monitoring:kube-prometheus-stack-operator$</field>
+    <field name="verb" type="pcre2">^(?:patch|update)$</field>
+    <field name="objectRef.resource" type="pcre2">^services$</field>
+    <field name="responseStatus.code" type="pcre2">^200$</field>
+    <description>Routine Prometheus Operator service reconciliation.</description>
+    <group>audit_benign,controller_reconciliation,</group>
+  </rule>
+
+  <rule id="100220" level="1">
+    <if_sid>100210</if_sid>
+    <field name="user.username" type="pcre2">^system:serviceaccount:external-secrets:external-secrets$</field>
+    <field name="verb" type="pcre2">^(?:patch|update)$</field>
+    <field name="objectRef.resource" type="pcre2">^(?:externalsecrets|clustersecretstores)$</field>
+    <field name="objectRef.subresource" type="pcre2">^status$</field>
+    <field name="responseStatus.code" type="pcre2">^200$</field>
+    <description>Routine External Secrets status reconciliation.</description>
+    <group>audit_benign,controller_reconciliation,</group>
+  </rule>
+
+  <rule id="100221" level="1">
+    <if_sid>100209</if_sid>
+    <field name="user.username" type="pcre2">^(?:system:serviceaccount:velero:velero-server|system:serviceaccount:kube-system:job-controller|system:kube-scheduler|system:serviceaccount:kube-system:generic-garbage-collector)$</field>
+    <field name="objectRef.namespace" type="pcre2">^velero$</field>
+    <field name="objectRef.resource" type="pcre2">^(?:pods|jobs)$</field>
+    <description>Routine Velero backup workload lifecycle.</description>
+    <group>audit_benign,scheduled_backup,</group>
+  </rule>
+
+  <rule id="100222" level="1">
+    <if_sid>100210</if_sid>
+    <field name="user.username" type="pcre2">^system:serviceaccount:keycloak:keycloak-db$</field>
+    <field name="verb" type="pcre2">^patch$</field>
+    <field name="objectRef.resource" type="pcre2">^clusters$</field>
+    <field name="objectRef.subresource" type="pcre2">^status$</field>
+    <field name="objectRef.namespace" type="pcre2">^keycloak$</field>
+    <field name="objectRef.name" type="pcre2">^keycloak-db$</field>
+    <field name="responseStatus.code" type="pcre2">^200$</field>
+    <description>Routine keycloak-db CloudNativePG status reconciliation.</description>
+    <group>audit_benign,controller_reconciliation,</group>
+  </rule>
 </group>

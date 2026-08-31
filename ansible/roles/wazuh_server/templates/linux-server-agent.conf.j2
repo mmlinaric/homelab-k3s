@@ -31,6 +31,16 @@
   </sca>
 
   <localfile>
+    <log_format>command</log_format>
+    <command>/usr/local/sbin/sec1-package-status</command>
+    <frequency>21600</frequency>
+    <alias>package-status</alias>
+  </localfile>
+
+</agent_config>
+
+<agent_config name="k3s-01">
+  <localfile>
     <log_format>json</log_format>
     <location>/var/lib/rancher/k3s/server/logs/audit.log</location>
     <label key="source">kubernetes-audit</label>

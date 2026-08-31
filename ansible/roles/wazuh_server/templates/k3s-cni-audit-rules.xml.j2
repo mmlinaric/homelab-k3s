@@ -1,0 +1,18 @@
+<group name="k3s,cni,audit,">
+  <!--
+    Rule 80710 uses an unanchored `prom=256` match.  It therefore also matches
+    audit records that clear the flag (`prom=0 old_prom=256`).  Linux bridge
+    management emits both transitions while K3s bridge CNI attaches and
+    removes pod veth interfaces.
+
+    Keep this scoped to the complete CNI provenance seen in the joined audit
+    event.  A promiscuous-mode change on any other interface or by any other
+    executable continues to alert through rule 80710.
+  -->
+  <rule id="100212" level="3">
+    <if_sid>80710</if_sid>
+    <regex type="pcre2">(?=.*\bdev=veth[[:xdigit:]]+\s+prom=(?:256\s+old_prom=0|0\s+old_prom=256)\b)(?=.*\bcomm="bridge"\s+exe="/var/lib/rancher/k3s/data/[[:xdigit:]]{64}/bin/cni")</regex>
+    <description>K3s bridge CNI changed promiscuous mode on an ephemeral pod veth.</description>
+    <group>k3s,cni,audit_benign,</group>
+  </rule>
+</group>
