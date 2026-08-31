@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+backup_root={{ zabbix_backup_mount | quote }}
+work_dir="${backup_root}/current"
+install -d -o postgres -g postgres -m 0750 "${work_dir}"
+
+notify() {
+  local message="$1"
+  set -a
+  source /etc/ops1-backup/telegram.env
+  set +a
+  curl --fail --silent --show-error --max-time 20 \
+    --data-urlencode "chat_id=${ZABBIX_TELEGRAM_CHAT_ID}" \
+    --data-urlencode "text=${message}" \
+    "https://api.telegram.org/bot${ZABBIX_TELEGRAM_BOT_TOKEN}/sendMessage" >/dev/null || true
+}
+trap 'notify "FAILED: ops1 Zabbix backup on $(hostname)"' ERR
+
+runuser -u postgres -- pg_dump --format=custom --file="${work_dir}/zabbix.dump.next" zabbix
+mv "${work_dir}/zabbix.dump.next" "${work_dir}/zabbix.dump"
+pg_restore --list "${work_dir}/zabbix.dump" >/dev/null
+tar --create --gzip --file="${work_dir}/configuration.tar.gz.next" \
+  /etc/zabbix /etc/nginx/sites-available/zabbix /etc/letsencrypt/renewal/{{ zabbix_dashboard_hostname }}.conf
+mv "${work_dir}/configuration.tar.gz.next" "${work_dir}/configuration.tar.gz"
+sha256sum "${work_dir}/zabbix.dump" "${work_dir}/configuration.tar.gz" >"${work_dir}/SHA256SUMS"
+
+set -a
+source /etc/ops1-backup/restic.env
+set +a
+restic backup "${work_dir}" --host ops1 --tag zabbix
+restic forget --host ops1 --tag zabbix --keep-daily 14 --keep-weekly 8 --keep-monthly 12 --prune
+restic check --read-data-subset=2.5%
+touch /var/lib/zabbix/ops1-backup-success
+notify "OK: ops1 Zabbix backup completed"

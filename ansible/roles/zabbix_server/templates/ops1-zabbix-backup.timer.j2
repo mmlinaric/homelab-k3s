@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly ops1 Zabbix backup
+
+[Timer]
+OnCalendar=*-*-* 01:15:00 Europe/Zagreb
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

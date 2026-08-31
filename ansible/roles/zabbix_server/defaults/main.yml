@@ -1,0 +1,21 @@
+---
+zabbix_version: 7.0.30
+zabbix_package_version: "1:7.0.30-1+ubuntu26.04"
+zabbix_release_url: https://repo.zabbix.com/zabbix/7.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_7.0-5+ubuntu26.04_all.deb
+zabbix_release_sha256: 8fd98468c0d15e18b04b141989ff40e0d509d68825e2d52d952437ce8476767d
+zabbix_server_address: 192.168.60.21
+zabbix_dashboard_hostname: zabbix.mmlinaric.com
+zabbix_backup_mount: /srv/zabbix-backup
+zabbix_backup_disk_serial: zabbix-backup
+zabbix_restic_version: 0.19.1
+zabbix_restic_sha256: f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c
+zabbix_restic_repository: "s3:{{ zabbix_s3_endpoint | regex_replace('/+$', '') }}/mmlinaric-homelab-zabbix/restic/ops1"
+zabbix_admin_sources:
+  - 192.168.90.2
+  - 192.168.90.3
+zabbix_agent_sources:
+  - 192.168.60.10
+  - 192.168.60.20
+  - 192.168.20.10
+  - 192.168.20.11
+zabbix_agent_psk_identity: homelab-active-agents

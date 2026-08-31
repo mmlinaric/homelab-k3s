@@ -1,0 +1,391 @@
+---
+- name: Require Ubuntu 26.04 on ops1
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == 'Ubuntu'
+      - ansible_distribution_version is version('26.04', '==')
+    fail_msg: The pinned Zabbix packages require Ubuntu 26.04.
+
+- name: Set the ops1 timezone
+  community.general.timezone:
+    name: Europe/Zagreb
+
+- name: Install base, database, web, and certificate prerequisites
+  ansible.builtin.apt:
+    name:
+      - bzip2
+      - ca-certificates
+      - certbot
+      - curl
+      - nginx
+      - php-pgsql
+      - postgresql
+      - python3-certbot-dns-cloudflare
+      - qemu-guest-agent
+      - ufw
+    state: present
+    update_cache: true
+
+- name: Download the pinned Zabbix repository package
+  ansible.builtin.get_url:
+    url: "{{ zabbix_release_url }}"
+    dest: /usr/local/src/zabbix-release.deb
+    checksum: "sha256:{{ zabbix_release_sha256 }}"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Install the Zabbix repository package
+  ansible.builtin.apt:
+    deb: /usr/local/src/zabbix-release.deb
+
+- name: Install pinned Zabbix server components
+  ansible.builtin.apt:
+    name:
+      - "zabbix-server-pgsql={{ zabbix_package_version }}"
+      - "zabbix-frontend-php={{ zabbix_package_version }}"
+      - "zabbix-nginx-conf={{ zabbix_package_version }}"
+      - "zabbix-sql-scripts={{ zabbix_package_version }}"
+      - "zabbix-get={{ zabbix_package_version }}"
+    state: present
+    update_cache: true
+
+- name: Hold central Zabbix packages against accidental major upgrades
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - zabbix-server-pgsql
+    - zabbix-frontend-php
+    - zabbix-nginx-conf
+    - zabbix-sql-scripts
+
+- name: Write the temporary database bootstrap SQL
+  ansible.builtin.copy:
+    dest: /var/lib/postgresql/zabbix-database-bootstrap.sql
+    owner: postgres
+    group: postgres
+    mode: '0600'
+    content: |
+      DO $do$
+      BEGIN
+        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'zabbix') THEN
+          CREATE ROLE zabbix LOGIN PASSWORD '{{ zabbix_db_password | replace("'", "''") }}';
+        ELSE
+          ALTER ROLE zabbix PASSWORD '{{ zabbix_db_password | replace("'", "''") }}';
+        END IF;
+      END
+      $do$;
+      SELECT 'CREATE DATABASE zabbix OWNER zabbix'
+      WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'zabbix')\gexec
+  no_log: true
+  changed_when: false
+
+- name: Create the Zabbix database and role
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - postgres
+      - --
+      - psql
+      - --file=/var/lib/postgresql/zabbix-database-bootstrap.sql
+  changed_when: false
+  no_log: true
+
+- name: Remove the temporary database bootstrap SQL
+  ansible.builtin.file:
+    path: /var/lib/postgresql/zabbix-database-bootstrap.sql
+    state: absent
+  changed_when: false
+
+- name: Check whether the Zabbix schema exists
+  ansible.builtin.command:
+    argv: [runuser, -u, postgres, --, psql, --dbname=zabbix, --tuples-only, --no-align, --command, "SELECT to_regclass('public.users');"]
+  register: zabbix_schema
+  changed_when: false
+
+- name: Import the initial Zabbix schema
+  ansible.builtin.shell: >-
+    set -o pipefail &&
+    gzip -dc /usr/share/zabbix-sql-scripts/postgresql/server.sql.gz |
+    runuser -u zabbix -- psql --dbname=zabbix
+  args:
+    executable: /bin/bash
+  when: zabbix_schema.stdout | trim == ''
+
+- name: Configure the Zabbix server
+  ansible.builtin.template:
+    src: zabbix-server.conf.j2
+    dest: /etc/zabbix/zabbix_server.conf
+    owner: root
+    group: zabbix
+    mode: '0640'
+  no_log: true
+  notify: Restart Zabbix server
+
+- name: Pre-create the Let's Encrypt directory
+  ansible.builtin.file:
+    path: /etc/letsencrypt
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Write Cloudflare DNS credentials for Certbot
+  ansible.builtin.copy:
+    content: "dns_cloudflare_api_token = {{ zabbix_cloudflare_api_token }}\n"
+    dest: /etc/letsencrypt/cloudflare.ini
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+
+- name: Obtain the internal Zabbix certificate with DNS-01
+  ansible.builtin.command:
+    argv:
+      - certbot
+      - certonly
+      - --dns-cloudflare
+      - --dns-cloudflare-credentials
+      - /etc/letsencrypt/cloudflare.ini
+      - --non-interactive
+      - --agree-tos
+      - --email
+      - "{{ zabbix_acme_email }}"
+      - --domain
+      - "{{ zabbix_dashboard_hostname }}"
+  args:
+    creates: "/etc/letsencrypt/live/{{ zabbix_dashboard_hostname }}/fullchain.pem"
+
+- name: Configure the Zabbix frontend database connection
+  ansible.builtin.template:
+    src: zabbix.conf.php.j2
+    dest: /etc/zabbix/web/zabbix.conf.php
+    owner: www-data
+    group: www-data
+    mode: '0640'
+  no_log: true
+
+- name: Configure the restricted HTTPS virtual host
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/sites-available/zabbix
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart Nginx
+
+- name: Set the Zabbix PHP timezone
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/php-fpm.conf
+    regexp: '^;?php_value\[date.timezone\]'
+    line: 'php_value[date.timezone] = Europe/Zagreb'
+  register: zabbix_php_timezone
+
+- name: Gather service facts for the installed PHP-FPM version
+  ansible.builtin.service_facts:
+
+- name: Restart PHP-FPM after configuration changes
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: restarted
+  loop: "{{ ansible_facts.services.keys() | select('match', '^php[0-9.]+-fpm\\.service$') | list }}"
+  when: zabbix_php_timezone.changed
+
+- name: Install the Nginx certificate deployment hook
+  ansible.builtin.template:
+    src: nginx-cert-deploy.sh.j2
+    dest: /etc/letsencrypt/renewal-hooks/deploy/zabbix-nginx
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Enable only the Zabbix Nginx site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/zabbix
+    dest: /etc/nginx/sites-enabled/zabbix
+    state: link
+  notify: Restart Nginx
+
+- name: Disable the default Nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Restart Nginx
+
+- name: Find the backup disk by its OpenTofu serial
+  ansible.builtin.shell: >-
+    set -o pipefail &&
+    lsblk -dpno NAME,SERIAL | awk '$2 == "{{ zabbix_backup_disk_serial }}" {print $1}'
+  args:
+    executable: /bin/bash
+  register: zabbix_backup_device
+  changed_when: false
+
+- name: Require exactly one Zabbix backup disk
+  ansible.builtin.assert:
+    that:
+      - zabbix_backup_device.stdout_lines | length == 1
+      - zabbix_backup_device.stdout_lines[0] is match('^/dev/')
+
+- name: Create the backup filesystem
+  community.general.filesystem:
+    dev: "{{ zabbix_backup_device.stdout_lines[0] }}"
+    fstype: ext4
+    opts: -L zabbix-backup
+
+- name: Mount the Zabbix backup filesystem
+  ansible.posix.mount:
+    path: "{{ zabbix_backup_mount }}"
+    src: LABEL=zabbix-backup
+    fstype: ext4
+    opts: defaults,nosuid,nodev,noexec
+    state: mounted
+
+- name: Install pinned Restic
+  ansible.builtin.get_url:
+    url: "https://github.com/restic/restic/releases/download/v{{ zabbix_restic_version }}/restic_{{ zabbix_restic_version }}_linux_amd64.bz2"
+    dest: "/usr/local/src/restic_{{ zabbix_restic_version }}_linux_amd64.bz2"
+    checksum: "sha256:{{ zabbix_restic_sha256 }}"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Expand the pinned Restic binary
+  ansible.builtin.command:
+    argv: [bzip2, -dk, "/usr/local/src/restic_{{ zabbix_restic_version }}_linux_amd64.bz2"]
+    creates: "/usr/local/src/restic_{{ zabbix_restic_version }}_linux_amd64"
+
+- name: Install the Restic binary
+  ansible.builtin.copy:
+    src: "/usr/local/src/restic_{{ zabbix_restic_version }}_linux_amd64"
+    dest: /usr/local/bin/restic
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Create the root-only backup configuration directory
+  ansible.builtin.file:
+    path: /etc/ops1-backup
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Create the root-only Restic cache directory
+  ansible.builtin.file:
+    path: /var/cache/restic
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Create the Zabbix backup health marker directory
+  ansible.builtin.file:
+    path: /var/lib/zabbix
+    state: directory
+    owner: zabbix
+    group: zabbix
+    mode: '0750'
+
+- name: Write backup credentials
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: '0600'
+  loop:
+    - {src: restic.env.j2, dest: /etc/ops1-backup/restic.env}
+    - {src: telegram.env.j2, dest: /etc/ops1-backup/telegram.env}
+  no_log: true
+
+- name: Check the Restic repository
+  ansible.builtin.command: /usr/local/bin/restic snapshots
+  environment:
+    RESTIC_REPOSITORY: "{{ zabbix_restic_repository }}"
+    RESTIC_PASSWORD: "{{ zabbix_restic_password }}"
+    AWS_ACCESS_KEY_ID: "{{ zabbix_s3_access_key }}"
+    AWS_SECRET_ACCESS_KEY: "{{ zabbix_s3_secret_key }}"
+    AWS_DEFAULT_REGION: "{{ zabbix_s3_region }}"
+  register: zabbix_restic_status
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Initialize the Restic repository
+  ansible.builtin.command: /usr/local/bin/restic init
+  environment:
+    RESTIC_REPOSITORY: "{{ zabbix_restic_repository }}"
+    RESTIC_PASSWORD: "{{ zabbix_restic_password }}"
+    AWS_ACCESS_KEY_ID: "{{ zabbix_s3_access_key }}"
+    AWS_SECRET_ACCESS_KEY: "{{ zabbix_s3_secret_key }}"
+    AWS_DEFAULT_REGION: "{{ zabbix_s3_region }}"
+  when: zabbix_restic_status.rc != 0
+  no_log: true
+
+- name: Install Zabbix operational utilities
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: '0750'
+  loop:
+    - {src: ops1-zabbix-backup.j2, dest: /usr/local/sbin/ops1-zabbix-backup}
+    - {src: ops1-zabbix-bootstrap.py.j2, dest: /usr/local/sbin/ops1-zabbix-bootstrap}
+
+- name: Install Zabbix backup systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - ops1-zabbix-backup.service
+    - ops1-zabbix-backup.timer
+  notify: Reload systemd
+
+- name: Allow administrator SSH and dashboard access
+  community.general.ufw:
+    rule: allow
+    src: "{{ item.0 }}"
+    port: "{{ item.1 }}"
+    proto: tcp
+  loop: "{{ zabbix_admin_sources | product(['22', '443']) | list }}"
+
+- name: Allow encrypted active-agent submissions
+  community.general.ufw:
+    rule: allow
+    src: "{{ item }}"
+    port: '10051'
+    proto: tcp
+  loop: "{{ zabbix_agent_sources }}"
+
+- name: Set restrictive host firewall defaults
+  community.general.ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - {direction: incoming, policy: deny}
+    - {direction: outgoing, policy: allow}
+
+- name: Enable the ops1 firewall
+  community.general.ufw:
+    state: enabled
+
+- name: Enable Zabbix, Nginx, PHP-FPM, and the backup timer
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop:
+    - postgresql
+    - zabbix-server
+    - nginx
+    - ops1-zabbix-backup.timer

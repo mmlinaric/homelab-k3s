@@ -1,0 +1,16 @@
+PidFile=/run/zabbix/zabbix_agent2.pid
+LogFile=/var/log/zabbix/zabbix_agent2.log
+LogFileSize=0
+Server={{ zabbix_server_address }}
+ServerActive={{ zabbix_server_address }}
+Hostname={{ inventory_hostname }}
+HostMetadata=homelab linux {{ zabbix_agent_group }}
+RefreshActiveChecks=60
+Timeout=10
+TLSConnect=psk
+TLSAccept=psk
+TLSPSKIdentity={{ zabbix_agent_psk_identity }}
+TLSPSKFile=/etc/zabbix/zabbix_agent2.psk
+UserParameter=homelab.reboot_required,test -e /var/run/reboot-required && echo 1 || echo 0
+UserParameter=homelab.updates_available,/usr/local/sbin/zabbix-apt-update-count
+UserParameter=homelab.zabbix_backup_fresh,test "$(hostname)" != ops1 || find /var/lib/zabbix -maxdepth 1 -name ops1-backup-success -mmin -1560 -print -quit | grep -q . && echo 1 || echo 0

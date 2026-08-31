@@ -1,0 +1,25 @@
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name {{ zabbix_dashboard_hostname }};
+
+    ssl_certificate /etc/letsencrypt/live/{{ zabbix_dashboard_hostname }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ zabbix_dashboard_hostname }}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    root /usr/share/zabbix;
+    index index.php;
+    client_max_body_size 16m;
+
+    location = /favicon.ico { log_not_found off; }
+    location / { try_files $uri $uri/ =404; }
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/run/php/zabbix.sock;
+        fastcgi_index index.php;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+
+    location ~ /(api/|conf[^\.]|include|locale) { deny all; }
+}

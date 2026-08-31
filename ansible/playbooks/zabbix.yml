@@ -1,0 +1,88 @@
+---
+- name: Deploy the ops1 Zabbix server
+  hosts: zabbix_servers
+  become: true
+  vars:
+    zabbix_db_password: "{{ lookup('env', 'ZABBIX_DB_PASSWORD') }}"
+    zabbix_admin_password: "{{ lookup('env', 'ZABBIX_ADMIN_PASSWORD') }}"
+    zabbix_agent_psk: "{{ lookup('env', 'ZABBIX_AGENT_PSK') }}"
+    zabbix_cloudflare_api_token: "{{ lookup('env', 'ZABBIX_CLOUDFLARE_API_TOKEN') }}"
+    zabbix_acme_email: "{{ lookup('env', 'ZABBIX_ACME_EMAIL') }}"
+    zabbix_restic_password: "{{ lookup('env', 'ZABBIX_RESTIC_PASSWORD') }}"
+    zabbix_s3_access_key: "{{ lookup('env', 'ZABBIX_S3_ACCESS_KEY') }}"
+    zabbix_s3_secret_key: "{{ lookup('env', 'ZABBIX_S3_SECRET_KEY') }}"
+    zabbix_s3_endpoint: "{{ lookup('env', 'ZABBIX_S3_ENDPOINT') }}"
+    zabbix_s3_region: "{{ lookup('env', 'ZABBIX_S3_REGION') }}"
+    zabbix_telegram_bot_token: "{{ lookup('env', 'ZABBIX_TELEGRAM_BOT_TOKEN') }}"
+    zabbix_telegram_chat_id: "{{ lookup('env', 'ZABBIX_TELEGRAM_CHAT_ID') }}"
+    zabbix_rb5009_snmp_auth_password: "{{ lookup('env', 'ZABBIX_RB5009_SNMP_AUTH_PASSWORD') }}"
+    zabbix_rb5009_snmp_privacy_password: "{{ lookup('env', 'ZABBIX_RB5009_SNMP_PRIVACY_PASSWORD') }}"
+    zabbix_css326_snmp_community: "{{ lookup('env', 'ZABBIX_CSS326_SNMP_COMMUNITY') }}"
+  pre_tasks:
+    - name: Require Zabbix deployment secrets
+      ansible.builtin.assert:
+        that:
+          - zabbix_db_password | length >= 20
+          - zabbix_admin_password | length >= 20
+          - zabbix_agent_psk is match('^[0-9a-fA-F]{64}$')
+          - item | length > 0
+        fail_msg: A required Zabbix deployment value is missing or invalid.
+      loop:
+        - "{{ zabbix_cloudflare_api_token }}"
+        - "{{ zabbix_acme_email }}"
+        - "{{ zabbix_restic_password }}"
+        - "{{ zabbix_s3_access_key }}"
+        - "{{ zabbix_s3_secret_key }}"
+        - "{{ zabbix_s3_endpoint }}"
+        - "{{ zabbix_s3_region }}"
+        - "{{ zabbix_telegram_bot_token }}"
+        - "{{ zabbix_telegram_chat_id }}"
+        - "{{ zabbix_rb5009_snmp_auth_password }}"
+        - "{{ zabbix_rb5009_snmp_privacy_password }}"
+        - "{{ zabbix_css326_snmp_community }}"
+      no_log: true
+  roles:
+    - ../roles/zabbix_server
+
+- name: Install encrypted active Zabbix agents
+  hosts: zabbix_agents
+  become: true
+  serial: 1
+  vars:
+    zabbix_agent_psk: "{{ lookup('env', 'ZABBIX_AGENT_PSK') }}"
+  pre_tasks:
+    - name: Require the shared active-agent PSK
+      ansible.builtin.assert:
+        that: zabbix_agent_psk is match('^[0-9a-fA-F]{64}$')
+      no_log: true
+  roles:
+    - ../roles/zabbix_agent
+
+- name: Reconcile initial Zabbix hosts and operational checks
+  hosts: zabbix_servers
+  become: true
+  vars:
+    zabbix_admin_password: "{{ lookup('env', 'ZABBIX_ADMIN_PASSWORD') }}"
+    zabbix_agent_psk: "{{ lookup('env', 'ZABBIX_AGENT_PSK') }}"
+    zabbix_rb5009_snmp_auth_password: "{{ lookup('env', 'ZABBIX_RB5009_SNMP_AUTH_PASSWORD') }}"
+    zabbix_rb5009_snmp_privacy_password: "{{ lookup('env', 'ZABBIX_RB5009_SNMP_PRIVACY_PASSWORD') }}"
+    zabbix_css326_snmp_community: "{{ lookup('env', 'ZABBIX_CSS326_SNMP_COMMUNITY') }}"
+  tasks:
+    - name: Reconcile the initial monitored hosts through the local API
+      ansible.builtin.command:
+        argv:
+          - /usr/local/sbin/ops1-zabbix-bootstrap
+          - ops1
+          - sec1
+          - k3s-01
+          - pve1
+          - pve2
+      register: zabbix_bootstrap
+      environment:
+        ZABBIX_ADMIN_PASSWORD: "{{ zabbix_admin_password }}"
+        ZABBIX_AGENT_PSK: "{{ zabbix_agent_psk }}"
+        ZABBIX_RB5009_SNMP_AUTH_PASSWORD: "{{ zabbix_rb5009_snmp_auth_password }}"
+        ZABBIX_RB5009_SNMP_PRIVACY_PASSWORD: "{{ zabbix_rb5009_snmp_privacy_password }}"
+        ZABBIX_CSS326_SNMP_COMMUNITY: "{{ zabbix_css326_snmp_community }}"
+      changed_when: "'changed' in zabbix_bootstrap.stdout"
+      no_log: true

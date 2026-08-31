@@ -1,0 +1,15 @@
+---
+zabbix_ubuntu_package_version: "1:7.0.30-1+ubuntu26.04"
+zabbix_ubuntu_release_url: https://repo.zabbix.com/zabbix/7.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_7.0-5+ubuntu26.04_all.deb
+zabbix_ubuntu_release_sha256: 8fd98468c0d15e18b04b141989ff40e0d509d68825e2d52d952437ce8476767d
+zabbix_ubuntu_release_version: "1:7.0-5+ubuntu26.04"
+zabbix_debian_package_version: "1:7.0.30-1+debian13"
+zabbix_debian_release_url: https://repo.zabbix.com/zabbix/7.0/debian/pool/main/z/zabbix-release/zabbix-release_latest_7.0+debian13_all.deb
+zabbix_debian_release_sha256: 4a926b8815cdefddc31558fe622676730a3987610f75d5af0d4024809d21dd43
+zabbix_debian_release_version: "1:7.0-5+debian13"
+zabbix_debian12_package_version: "1:7.0.30-1+debian12"
+zabbix_debian12_release_url: https://repo.zabbix.com/zabbix/7.0/debian/pool/main/z/zabbix-release/zabbix-release_latest_7.0+debian12_all.deb
+zabbix_debian12_release_sha256: 950bd75b2a0f813208f8d01fc114ff2907296425664b0366927b6269024212ed
+zabbix_debian12_release_version: "1:7.0-5+debian12"
+zabbix_server_address: 192.168.60.21
+zabbix_agent_psk_identity: homelab-active-agents

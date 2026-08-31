@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+import json
+import os
+import sys
+import urllib.request
+
+URL = "https://127.0.0.1/api_jsonrpc.php"
+PASSWORD = os.environ["ZABBIX_ADMIN_PASSWORD"]
+PSK = os.environ["ZABBIX_AGENT_PSK"]
+PSK_IDENTITY = "{{ zabbix_agent_psk_identity }}"
+SNMP_AUTH = os.environ["ZABBIX_RB5009_SNMP_AUTH_PASSWORD"]
+SNMP_PRIV = os.environ["ZABBIX_RB5009_SNMP_PRIVACY_PASSWORD"]
+SNMP_COMMUNITY = os.environ["ZABBIX_CSS326_SNMP_COMMUNITY"]
+changed = False
+
+
+def call(method, params, auth=None):
+    payload = {"jsonrpc": "2.0", "method": method, "params": params, "id": 1}
+    if auth:
+        payload["auth"] = auth
+    request = urllib.request.Request(
+        URL,
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json-rpc"},
+    )
+    context = __import__("ssl")._create_unverified_context()
+    with urllib.request.urlopen(request, context=context, timeout=15) as response:
+        result = json.load(response)
+    if "error" in result:
+        raise RuntimeError(f"{method}: {result['error']['data']}")
+    return result["result"]
+
+
+def login(password):
+    return call("user.login", {"username": "Admin", "password": password})
+
+
+try:
+    token = login(PASSWORD)
+except Exception:
+    token = login("zabbix")
+    admin = call("user.get", {"output": ["userid"], "filter": {"username": ["Admin"]}}, token)[0]
+    call("user.update", {
+        "userid": admin["userid"],
+        "passwd": PASSWORD,
+        "current_passwd": "zabbix",
+    }, token)
+    token = login(PASSWORD)
+    changed = True
+
+linux_group = call("hostgroup.get", {"output": ["groupid"], "filter": {"name": ["Linux servers"]}}, token)[0]
+template_group = call("templategroup.get", {"output": ["groupid"], "filter": {"name": ["Templates/Operating systems"]}}, token)[0]
+linux_template = call("template.get", {"output": ["templateid"], "filter": {"host": ["Linux by Zabbix agent active"]}}, token)[0]
+
+custom = call("template.get", {"output": ["templateid"], "filter": {"host": ["Homelab Linux operations"]}}, token)
+if custom:
+    custom_id = custom[0]["templateid"]
+else:
+    custom_id = call("template.create", {
+        "host": "Homelab Linux operations",
+        "name": "Homelab Linux operations",
+        "groups": [{"groupid": template_group["groupid"]}],
+    }, token)["templateids"][0]
+    changed = True
+
+items = {
+    "homelab.reboot_required": ("Reboot required", "5m"),
+    "homelab.updates_available": ("APT updates available", "1h"),
+    "homelab.zabbix_backup_fresh": ("ops1 backup fresh", "1h"),
+}
+for key, (name, delay) in items.items():
+    existing = call("item.get", {"output": ["itemid"], "templateids": [custom_id], "filter": {"key_": [key]}}, token)
+    if not existing:
+        call("item.create", {
+            "name": name, "key_": key, "hostid": custom_id,
+            "type": 7, "value_type": 3, "delay": delay,
+        }, token)
+        changed = True
+
+expression = "last(/Homelab Linux operations/homelab.reboot_required)=1"
+triggers = call("trigger.get", {"output": ["triggerid"], "filter": {"description": ["Linux host requires reboot"]}, "templateids": [custom_id]}, token)
+if not triggers:
+    call("trigger.create", {"description": "Linux host requires reboot", "expression": expression, "priority": 2}, token)
+    changed = True
+
+backup_expression = "last(/Homelab Linux operations/homelab.zabbix_backup_fresh)=0"
+backup_triggers = call("trigger.get", {"output": ["triggerid"], "filter": {"description": ["ops1 Zabbix backup is older than 26 hours"]}, "templateids": [custom_id]}, token)
+if not backup_triggers:
+    call("trigger.create", {"description": "ops1 Zabbix backup is older than 26 hours", "expression": backup_expression, "priority": 4}, token)
+    changed = True
+
+template_ids = [{"templateid": linux_template["templateid"]}, {"templateid": custom_id}]
+for hostname in sys.argv[1:]:
+    hosts = call("host.get", {"output": ["hostid"], "filter": {"host": [hostname]}}, token)
+    settings = {
+        "tls_connect": 2,
+        "tls_accept": 2,
+        "tls_psk_identity": PSK_IDENTITY,
+        "tls_psk": PSK,
+    }
+    if hosts:
+        host_id = hosts[0]["hostid"]
+        call("host.update", {"hostid": host_id, **settings}, token)
+        call("host.massadd", {
+            "hosts": [{"hostid": host_id}],
+            "groups": [{"groupid": linux_group["groupid"]}],
+            "templates": template_ids,
+        }, token)
+    else:
+        call("host.create", {
+            "host": hostname,
+            "name": hostname,
+            "groups": [{"groupid": linux_group["groupid"]}],
+            "templates": template_ids,
+            **settings,
+        }, token)
+        changed = True
+
+snmp_template = call("template.get", {"output": ["templateid"], "search": {"host": ["MikroTik by SNMP"]}}, token)
+if not snmp_template:
+    snmp_template = call("template.get", {"output": ["templateid"], "search": {"name": ["MikroTik"]}}, token)
+snmp_template_ids = [{"templateid": snmp_template[0]["templateid"]}] if snmp_template else []
+for hostname, address, details in [
+    ("rb5009", "192.168.20.1", {"version": 3, "securityname": "zabbix", "securitylevel": 2, "authprotocol": 1, "authpassphrase": SNMP_AUTH, "privprotocol": 1, "privpassphrase": SNMP_PRIV}),
+    ("css326", "192.168.20.2", {"version": 2, "community": SNMP_COMMUNITY}),
+]:
+    existing = call("host.get", {"output": ["hostid"], "filter": {"host": [hostname]}}, token)
+    interface = {"type": 2, "main": 1, "useip": 1, "ip": address, "dns": "", "port": "161", "details": details}
+    if existing:
+        call("host.update", {"hostid": existing[0]["hostid"], "interfaces": [interface], **({"templates": snmp_template_ids} if snmp_template_ids else {})}, token)
+    else:
+        params = {"host": hostname, "name": hostname, "groups": [{"groupid": linux_group["groupid"]}], "interfaces": [interface]}
+        if snmp_template_ids:
+            params["templates"] = snmp_template_ids
+        call("host.create", params, token)
+        changed = True
+
+default = call("host.get", {"output": ["hostid", "status"], "filter": {"host": ["Zabbix server"]}}, token)
+if default and default[0]["status"] != "1":
+    call("host.update", {"hostid": default[0]["hostid"], "status": 1}, token)
+    changed = True
+
+print("changed" if changed else "ok")

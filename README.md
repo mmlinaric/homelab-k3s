@@ -46,6 +46,10 @@ The first node is `192.168.60.10`. MetalLB assigns `192.168.60.100` to Traefik, 
 4. Follow [docs/migration.md](docs/migration.md) for the cutover.
 5. Run a restore drill using [docs/restore.md](docs/restore.md).
 
+Operational monitoring is deployed separately on `ops1`; see
+[docs/zabbix.md](docs/zabbix.md). Security monitoring and recovery are covered
+in [docs/wazuh.md](docs/wazuh.md).
+
 Run `pwsh ./scripts/validate.ps1` before pushing. Argo CD tracks `main`, prunes removed resources, and self-heals drift. Renovate opens dependency pull requests, but does not merge them.
 
 ## Backup model
