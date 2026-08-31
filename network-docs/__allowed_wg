@@ -1,0 +1,131 @@
+RB5009 IPv4 ACCESS MAP — CURRENT COMMITTED POLICY
+Committed: 2026-08-23
+
+This is an operational note, not an importable RouterOS script.
+The live firewall rules remain the authoritative configuration.
+
+
+WIREGUARD ADMIN IDENTITIES
+==========================
+
+HOST-ADMIN contains exactly:
+
+  192.168.90.2/32   Mario's Pixel 9
+  192.168.90.3/32   Mario's ThinkPad / Fedora
+
+Both peers receive the same permissions. A new WireGuard peer does not receive
+administrative access automatically; its individual tunnel address must first
+be added to HOST-ADMIN.
+
+
+WIREGUARD ENTRY TO THE ROUTER
+=============================
+
+WireGuard handshake:
+
+  UDP 13231 is accepted from the WAN interface list.
+  UDP 13231 is also accepted from VLAN30 (192.168.30.0/24), allowing a local
+  trusted device to establish the tunnel without leaving the LAN.
+
+Once authenticated through wireguard1, a HOST-ADMIN peer may access the RB5009:
+
+  TCP 22       SSH
+  TCP 443      HTTPS / the configured TCP 443 service
+  TCP 8291     WinBox
+  ICMP         Ping and related IPv4 diagnostics
+
+Other WireGuard-to-router IPv4 traffic is denied unless another earlier,
+explicit firewall rule permits it.
+
+
+WIREGUARD FORWARDING MAP
+========================
+
+Destination                         Allowed from HOST-ADMIN over wireguard1
+----------------------------------  ------------------------------------------
+VLAN10 OOB/KVM 192.168.10.0/24      TCP 22, 80, 443; ICMP
+VLAN20 MGMT    192.168.20.0/24      TCP 22, 80, 443, 8006, 8291; ICMP
+PBS (reserved)  192.168.20.21/32    TCP 8007
+VLAN30 TRUSTED 192.168.30.0/24      No new connections
+VLAN40 GUEST   192.168.40.0/24      No new connections
+VLAN60 SERVERS 192.168.60.0/24      TCP 22, 80, 443, 6443; ICMP
+VLAN99 QUARANTINE                    No new connections
+Internet through WAN                Allowed (full-tunnel Internet)
+VoIP/provider network               No WireGuard administration rule
+
+Stateful return traffic for permitted connections remains allowed by the
+existing established/related firewall policy.
+
+
+VLAN-TO-ROUTER SUMMARY
+======================
+
+VLAN10 — OOB/KVM
+
+  Allowed to RB5009: DHCP (UDP 67), DNS (UDP/TCP 53), ICMP.
+  Router management is not generally allowed directly from VLAN10.
+  Management of VLAN10 devices is available from an authenticated WG admin on
+  TCP 22/80/443 and ICMP.
+
+VLAN20 — infrastructure management
+
+  Allowed to RB5009: existing DNS and ICMP rules.
+  Infrastructure may access the Internet under the existing explicit rule.
+  Initiating connections into other private networks is blocked.
+  Router administration should be performed through WireGuard.
+
+VLAN30 — trusted clients
+
+  Allowed to RB5009: DHCP, DNS and ICMP.
+  Other direct router access, including SSH/HTTPS/WinBox, is blocked.
+  Internet access remains allowed.
+  Initiating connections into private networks is blocked except for any
+  narrow, pre-existing explicit service rules (for example trusted ingress to
+  servers).
+  Local devices may initiate the WireGuard handshake on UDP 13231 and then use
+  their authenticated 192.168.90.x identity for administration.
+
+VLAN40 — guests
+
+  Allowed to RB5009: DHCP and DNS only under the existing guest rules.
+  Other router access is blocked.
+  Access to LAN/private networks and guest-to-guest forwarding is blocked.
+  Internet access remains allowed.
+
+VLAN60 — servers
+
+  Allowed to RB5009: DNS and ICMP under the existing server rules.
+  Other router access is blocked.
+  Servers may access the Internet under the existing explicit rule.
+  Initiating connections into other private networks is blocked.
+  Authenticated WG admins may manage servers using TCP 22/80/443/6443 and ICMP.
+
+VLAN99 — quarantine
+
+  No explicit allow rule exists. Unmatched IPv4 input and forwarding traffic
+  reaches the final default-deny rules.
+
+
+IMPORTANT OPERATIONAL CONSEQUENCES
+==================================
+
+  - Fedora at 192.168.30.43 is no longer a HOST-ADMIN identity on VLAN30.
+  - Direct Fedora/LAN access to router SSH, HTTPS or WinBox is intentionally
+    denied. Bring up WireGuard and connect through 192.168.90.1 instead.
+  - Pixel and ThinkPad can administer VLAN10, VLAN20 and VLAN60 only on the
+    ports listed above; WireGuard does not grant unrestricted inter-VLAN access.
+  - WireGuard-to-VLAN30 and WireGuard-to-VLAN40 new connections are denied.
+  - Both IPv4 input and forward chains end with explicit default-deny rules.
+  - This note describes the current IPv4 policy only. IPv6 and management-service
+    restrictions are separate policies.
+
+
+VALIDATED AFTER COMMIT
+======================
+
+  - Router SSH and WinBox over WireGuard: working.
+  - VLAN20 HTTP/SSH/Proxmox management targets over WireGuard: working.
+  - VLAN60 SSH, HTTPS and Kubernetes API (TCP 6443) over WireGuard: working.
+  - Full-tunnel Internet and external DNS over WireGuard: working.
+  - Forced WireGuard-to-VLAN30 ICMP: denied by final forwarding rule.
+  - Direct VLAN30-to-router SSH: denied by TRUSTED30 router-access rule.

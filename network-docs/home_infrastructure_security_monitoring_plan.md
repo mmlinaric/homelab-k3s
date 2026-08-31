@@ -40,6 +40,10 @@ The next priorities are:
 - Unused RB5009 interfaces `ether3` through `ether6` are disabled.
 - CAPsMAN requires authenticated CAP certificates; the main and guest Wi-Fi services were validated afterward.
 - Pre-change and post-change RB5009 recovery checkpoints were created, downloaded, and hashed.
+- The three automatic RouterOS support dumps were submitted privately to
+  MikroTik together with proof-of-concept reproduction scripts. MikroTik fixed
+  the underlying defect in the newest RouterOS release; only the normal
+  maintenance-window upgrade and post-upgrade recurrence check remain.
 
 The M920q should run Proxmox as an independent node. It should host monitoring and security workloads and act as a recovery destination. It should not become required for normal application operation.
 
@@ -1483,8 +1487,8 @@ Prepare separate one-page runbooks for:
 - [x] Configure temporary legacy LAN access first.
 - [x] Add VLAN-aware `vmbr0`.
 - [x] Configure VLAN 20 management at `192.168.20.11`.
-- [ ] Create `OPS-01`.
-- [ ] Move or rebuild Zabbix.
+- [x] Create `OPS-01`.
+- [x] Move or rebuild Zabbix.
 - [x] Configure the initial direct RB5009-to-Wazuh syslog path.
 - [x] Create `sec1`.
 - [x] Install Wazuh.
@@ -1875,7 +1879,7 @@ Availability target:
 
 ## 22. Next concrete actions from the current state
 
-1. Investigate the three automatic RouterOS support dumps through MikroTik's private support channel before extensive additional configuration work; the third occurred on 2026-08-24 while opening an interactive maintenance session before any mutation was applied.
+1. Upgrade the RB5009 to the MikroTik release containing the confirmed support-dump fix in a dedicated maintenance window, then verify that the defect does not recur.
 2. Revalidate the ThinkPad WireGuard peer and periodically retest the documented physical recovery path.
 3. Save fresh RB5009, wAP ax, CSS326, and TL-SG108E checkpoints and hashes before their next maintenance stages.
 4. Inventory every CSS326 and TL-SG108E port, including VLAN membership, PVID, tagged/untagged behavior, ingress filtering, connected device, and residual VLAN 1 participation.
@@ -1883,5 +1887,5 @@ Availability target:
 6. Disable unused switch ports or place them in VLAN 99, remove unnecessary Layer-2 VLAN 1 participation, and verify that access ports reject injected VLAN tags.
 7. Harden wAP and switch management protocols, sources, credentials, MAC services, and discovery in separate maintenance windows.
 8. Decide whether to deploy Route64 IPv6 with equivalent default-deny isolation or disable routed IPv6 until that design is ready.
-9. Resolve SNMP, time synchronization, and centralized security logging; then clean up confirmed-unused OpenVPN, PPP/IPsec, NAT, scheduler, and address-list leftovers.
+9. Complete centralized security-log retention, then clean up confirmed-unused OpenVPN, PPP/IPsec, NAT, scheduler, and address-list leftovers. SNMP monitoring and Linux time synchronization are operational.
 10. Improve IoT/media separation and VLAN 20/VLAN 60 east-west controls, run the final validation matrix, and create final backups and documentation.
