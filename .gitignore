@@ -14,6 +14,7 @@ cloudflare-token.txt
 *.p12
 *.pfx
 *.zip
+__pycache__/
 rendered/
 *.tfstate
 *.tfstate.*
