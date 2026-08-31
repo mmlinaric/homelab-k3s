@@ -1,0 +1,5 @@
+proxmox_endpoint  = "https://192.168.20.11:8006/"
+proxmox_insecure  = false
+ssh_public_key    = "ssh-ed25519 CHANGE_ME"
+
+# Supply TF_VAR_proxmox_api_token through the environment. Do not put it here.
