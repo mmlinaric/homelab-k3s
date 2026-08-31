@@ -1,0 +1,14 @@
+DBHost=localhost
+DBName=zabbix
+DBUser=zabbix
+DBPassword={{ zabbix_db_password }}
+LogFile=/var/log/zabbix/zabbix_server.log
+LogFileSize=0
+PidFile=/run/zabbix/zabbix_server.pid
+SocketDir=/run/zabbix
+SNMPTrapperFile=/var/log/snmptrap/snmptrap.log
+Timeout=10
+FpingLocation=/usr/bin/fping
+Fping6Location=/usr/bin/fping6
+LogSlowQueries=3000
+StatsAllowedIP=127.0.0.1

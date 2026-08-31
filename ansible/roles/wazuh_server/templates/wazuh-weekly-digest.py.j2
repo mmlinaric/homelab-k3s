@@ -1,0 +1,365 @@
+#!/usr/bin/env python3
+"""Build and optionally send the deterministic weekly Wazuh operator digest."""
+
+import argparse
+import json
+import ssl
+import subprocess
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime
+from pathlib import Path
+
+
+ENV_FILE = Path("/var/ossec/etc/telegram-alert.env")
+ALERT_INDEX_URL = "https://127.0.0.1:9200/wazuh-alerts-*/_search"
+VULNERABILITY_INDEX_URL = (
+    "https://127.0.0.1:9200/wazuh-states-vulnerabilities-*/_search"
+)
+CA_FILE = "/etc/wazuh-indexer/certs/root-ca.pem"
+CERT_FILE = "/etc/wazuh-indexer/certs/admin.pem"
+KEY_FILE = "/etc/wazuh-indexer/certs/admin-key.pem"
+DASHBOARD_URL = "https://{{ wazuh_dashboard_hostname }}"
+TELEGRAM_MESSAGE_LIMIT = 4096
+
+
+def load_credentials():
+    values = {}
+    for raw_line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, separator, raw_value = line.partition("=")
+        if not separator:
+            raise ValueError(f"invalid credential line for {key!r}")
+        values[key] = json.loads(raw_value)
+    token = values.get("TELEGRAM_BOT_TOKEN", "")
+    chat_id = values.get("TELEGRAM_CHAT_ID", "")
+    if not token or not chat_id:
+        raise ValueError("Telegram credentials are incomplete")
+    return token, chat_id
+
+
+def index_request(url, query):
+    context = ssl.create_default_context(cafile=CA_FILE)
+    if hasattr(ssl, "VERIFY_X509_STRICT"):
+        context.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    context.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(query).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, context=context, timeout=30) as response:
+        return json.load(response)
+
+
+def alert_search():
+    query = {
+        "size": 0,
+        "track_total_hits": True,
+        "query": {"range": {"timestamp": {"gte": "now-7d"}}},
+        "aggs": {
+            "critical": {"filter": {"range": {"rule.level": {"gte": 10}}}},
+            "attention": {
+                "filter": {
+                    "bool": {
+                        "filter": [{"range": {"rule.level": {"gte": 7}}}],
+                        "must_not": [
+                            {"term": {"rule.groups": "audit_benign"}},
+                            {"term": {"rule.groups": "sca"}},
+                            {
+                                "terms": {
+                                    "rule.id": ["510", "550", "553", "2902", "2904", "80710"]
+                                }
+                            },
+                        ],
+                    }
+                },
+                "aggs": {
+                    "rules": {
+                        "terms": {"field": "rule.id", "size": 6},
+                        "aggs": {
+                            "description": {
+                                "terms": {"field": "rule.description", "size": 1}
+                            },
+                            "level": {"max": {"field": "rule.level"}},
+                        },
+                    }
+                },
+            },
+            "authentication_failures": {
+                "filter": {"term": {"rule.groups": "authentication_failed"}}
+            },
+            "configuration_changes": {
+                "filter": {"term": {"rule.groups": "configuration_changed"}}
+            },
+            "fim_changes": {
+                "filter": {"terms": {"rule.id": ["550", "553", "554"]}}
+            },
+            "malware_detections": {
+                "filter": {"terms": {"rule.id": ["110500", "110501"]}}
+            },
+            "monitoring_failures": {
+                "filter": {
+                    "terms": {"rule.id": ["100110", "110502", "110503"]}
+                }
+            },
+            "successful_scans": {
+                "filter": {"term": {"rule.id": "110505"}},
+                "aggs": {"agents": {"terms": {"field": "agent.name", "size": 10}}},
+            },
+            "package_status": {
+                "filter": {"term": {"rule.groups": "package_hygiene"}},
+                "aggs": {
+                    "agents": {
+                        "terms": {"field": "agent.name", "size": 10},
+                        "aggs": {
+                            "latest": {
+                                "top_hits": {
+                                    "size": 1,
+                                    "sort": [{"timestamp": {"order": "desc"}}],
+                                    "_source": [
+                                        "timestamp",
+                                        "agent.name",
+                                        "data.package_pending",
+                                        "data.package_deferred",
+                                        "data.security_updates",
+                                        "data.reboot_required",
+                                        "data.kernel_running",
+                                        "data.kernel_newest",
+                                    ],
+                                }
+                            }
+                        },
+                    }
+                },
+            },
+        },
+    }
+    return index_request(ALERT_INDEX_URL, query)
+
+
+def vulnerability_search():
+    query = {
+        "size": 0,
+        "track_total_hits": True,
+        "aggs": {
+            "severity": {
+                "terms": {"field": "vulnerability.severity", "size": 10}
+            },
+            "under_evaluation": {
+                "filter": {"term": {"vulnerability.under_evaluation": True}}
+            },
+            "agents": {"terms": {"field": "agent.name", "size": 20}},
+            "critical_high": {
+                "filter": {
+                    "bool": {
+                        "filter": [
+                            {
+                                "terms": {
+                                    "vulnerability.severity": ["Critical", "High"]
+                                }
+                            }
+                        ],
+                        "must_not": [
+                            {"term": {"vulnerability.under_evaluation": True}}
+                        ],
+                    }
+                },
+                "aggs": {
+                    "packages": {"terms": {"field": "package.name", "size": 5}}
+                },
+            },
+        },
+    }
+    return index_request(VULNERABILITY_INDEX_URL, query)
+
+
+def host_health():
+    agents_output = subprocess.run(
+        ["/var/ossec/bin/agent_control", "-l"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    ).stdout
+    agents = [line.strip() for line in agents_output.splitlines() if "ID:" in line]
+    inactive_agents = [line for line in agents if "Active" not in line]
+
+    services = ["wazuh-manager", "wazuh-indexer", "wazuh-dashboard", "filebeat"]
+    failed_services = []
+    for service in services:
+        result = subprocess.run(
+            ["systemctl", "is-active", service],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.stdout.strip() != "active":
+            failed_services.append(service)
+    return len(agents), inactive_agents, failed_services
+
+
+def build_message(alert_result, vulnerability_result):
+    aggregations = alert_result["aggregations"]
+    vulnerabilities = vulnerability_result["aggregations"]
+    total = alert_result["hits"]["total"]["value"]
+    agent_count, inactive_agents, failed_services = host_health()
+    scan_agents = [
+        bucket["key"]
+        for bucket in aggregations["successful_scans"]["agents"]["buckets"]
+    ]
+
+    attention = aggregations["attention"]["doc_count"]
+    critical = aggregations["critical"]["doc_count"]
+    vulnerability_severity = {
+        bucket["key"]: bucket["doc_count"]
+        for bucket in vulnerabilities["severity"]["buckets"]
+    }
+    vulnerability_agents = [
+        bucket["key"] for bucket in vulnerabilities["agents"]["buckets"]
+    ]
+
+    package_reports = []
+    for bucket in aggregations["package_status"]["agents"]["buckets"]:
+        hits = bucket["latest"]["hits"]["hits"]
+        if not hits:
+            continue
+        source = hits[0]["_source"]
+        data = source.get("data", {})
+        package_reports.append(
+            {
+                "agent": bucket["key"],
+                "pending": int(data.get("package_pending", 0)),
+                "deferred": int(data.get("package_deferred", 0)),
+                "security": int(data.get("security_updates", 0)),
+                "reboot": int(data.get("reboot_required", 0)),
+            }
+        )
+    pending_updates = sum(report["pending"] for report in package_reports)
+    deferred_updates = sum(report["deferred"] for report in package_reports)
+    security_updates = sum(report["security"] for report in package_reports)
+    reboot_hosts = [report["agent"] for report in package_reports if report["reboot"]]
+    health = "healthy"
+    if inactive_agents or failed_services:
+        health = "ATTENTION REQUIRED"
+
+    lines = [
+        "Wazuh weekly homelab digest",
+        f"Generated: {datetime.now().astimezone().strftime('%Y-%m-%d %H:%M %Z')}",
+        "Period: previous 7 days",
+        "",
+        f"Platform health: {health}",
+        f"Agents: {agent_count - len(inactive_agents)}/{agent_count} active",
+        f"Core services: {4 - len(failed_services)}/4 active",
+        f"Alerts indexed: {total}",
+        "",
+        f"Needs attention: {attention}",
+        f"Critical (L10+): {critical}",
+        f"Authentication failures: {aggregations['authentication_failures']['doc_count']}",
+        f"Configuration changes: {aggregations['configuration_changes']['doc_count']}",
+        f"FIM changes: {aggregations['fim_changes']['doc_count']}",
+        f"Malware detections: {aggregations['malware_detections']['doc_count']}",
+        f"Monitoring failures: {aggregations['monitoring_failures']['doc_count']}",
+        f"Hosts with successful ClamAV scan evidence: {len(scan_agents)}/{agent_count}",
+        "",
+        "Current vulnerability posture:",
+        f"Critical vulnerability records: {vulnerability_severity.get('Critical', 0)}",
+        f"High vulnerability records: {vulnerability_severity.get('High', 0)}",
+        f"Under evaluation: {vulnerabilities['under_evaluation']['doc_count']}",
+        f"Vulnerability inventory coverage: {len(vulnerability_agents)}/{agent_count} hosts",
+        "",
+        "Latest package posture:",
+        f"Reporting hosts: {len(package_reports)}/{agent_count}",
+        f"Pending package updates: {pending_updates}",
+        f"Rollout-deferred updates: {deferred_updates}",
+        f"Security-labelled updates: {security_updates}",
+        f"Reboot-required hosts: {len(reboot_hosts)}",
+    ]
+
+    if inactive_agents:
+        lines.extend(["", "Inactive agents:", *[f"- {item}" for item in inactive_agents]])
+    if failed_services:
+        lines.extend(["", "Failed core services:", *[f"- {item}" for item in failed_services]])
+    if reboot_hosts:
+        lines.extend(["", "Reboot-required hosts:", *[f"- {item}" for item in reboot_hosts]])
+    if len(vulnerability_agents) < agent_count:
+        lines.extend(
+            [
+                "",
+                "Vulnerability coverage warning:",
+                f"- reporting: {', '.join(vulnerability_agents) or 'none'}",
+            ]
+        )
+
+    vulnerable_packages = vulnerabilities["critical_high"]["packages"]["buckets"]
+    if vulnerable_packages:
+        lines.extend(["", "Top Critical/High vulnerable packages:"])
+        for bucket in vulnerable_packages:
+            lines.append(f"- {bucket['key']}: {bucket['doc_count']}")
+
+    top_rules = aggregations["attention"]["rules"]["buckets"]
+    if top_rules:
+        lines.extend(["", "Top attention rules:"])
+        for bucket in top_rules:
+            descriptions = bucket["description"]["buckets"]
+            description = descriptions[0]["key"] if descriptions else f"Rule {bucket['key']}"
+            level = int(bucket["level"]["value"] or 0)
+            lines.append(f"- L{level} {description}: {bucket['doc_count']}")
+    else:
+        lines.extend(["", "No actionable security alerts were recorded."])
+
+    lines.extend(["", f"Cockpit: {DASHBOARD_URL}/app/dashboards#/view/homelab-security-cockpit"])
+    return "\n".join(lines)[: TELEGRAM_MESSAGE_LIMIT - 1]
+
+
+def send_telegram(message):
+    token, chat_id = load_credentials()
+    payload = urllib.parse.urlencode(
+        {"chat_id": chat_id, "text": message, "disable_web_page_preview": "true"}
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/sendMessage",
+        data=payload,
+        method="POST",
+    )
+    for attempt in range(2):
+        try:
+            with urllib.request.urlopen(request, timeout=15) as response:
+                result = json.load(response)
+            break
+        except urllib.error.HTTPError as error:
+            if error.code != 429 or attempt:
+                raise RuntimeError(
+                    f"Telegram API returned HTTP {error.code}"
+                ) from error
+            try:
+                body = json.loads(error.read().decode("utf-8"))
+                retry_after = int(body.get("parameters", {}).get("retry_after", 1))
+            except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                retry_after = 1
+            time.sleep(min(max(retry_after, 1), 45))
+    else:
+        raise RuntimeError("Telegram API retry was exhausted")
+    if not result.get("ok"):
+        raise RuntimeError("Telegram API rejected the digest")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--send", action="store_true", help="send instead of printing")
+    args = parser.parse_args()
+    message = build_message(alert_search(), vulnerability_search())
+    if args.send:
+        send_telegram(message)
+    else:
+        print(message)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,88 @@
+---
+- name: Install Wazuh agent prerequisites
+  ansible.builtin.apt:
+    name:
+      - auditd
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+
+- name: Install the Wazuh repository signing key
+  ansible.builtin.get_url:
+    url: https://packages.wazuh.com/key/GPG-KEY-WAZUH
+    dest: /usr/share/keyrings/wazuh.asc
+    checksum: "sha256:{{ wazuh_repository_key_sha256 }}"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Configure the Wazuh package repository
+  ansible.builtin.apt_repository:
+    repo: deb [signed-by=/usr/share/keyrings/wazuh.asc] https://packages.wazuh.com/4.x/apt/ stable main
+    filename: wazuh
+    state: present
+
+- name: Install the pinned Wazuh agent
+  ansible.builtin.apt:
+    name: "wazuh-agent={{ wazuh_version }}-1"
+    state: present
+    update_cache: true
+
+- name: Point the agent at sec1
+  ansible.builtin.replace:
+    path: /var/ossec/etc/ossec.conf
+    regexp: '<address>[^<]+</address>'
+    replace: '<address>{{ wazuh_server_address }}</address>'
+  notify: Restart Wazuh agent
+
+- name: Check whether the agent has an enrollment key
+  ansible.builtin.command: grep -Eq '^[0-9]+ ' /var/ossec/etc/client.keys
+  register: wazuh_agent_key
+  changed_when: false
+  failed_when: false
+
+- name: Ensure the root SSH directory exists for audit monitoring
+  ansible.builtin.file:
+    path: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Enroll the agent with sec1
+  ansible.builtin.command:
+    argv:
+      - /var/ossec/bin/agent-auth
+      - -m
+      - "{{ wazuh_server_address }}"
+      - -A
+      - "{{ inventory_hostname }}"
+      - -P
+      - "{{ wazuh_enrollment_password }}"
+      - -G
+      - "{{ wazuh_agent_group }}"
+  when: wazuh_agent_key.rc != 0
+  no_log: true
+  notify: Restart Wazuh agent
+
+- name: Install targeted audit rules
+  ansible.builtin.template:
+    src: sec1-audit.rules.j2
+    dest: /etc/audit/rules.d/sec1-wazuh.rules
+    owner: root
+    group: root
+    mode: '0640'
+  notify: Reload audit rules
+
+- name: Hold the Wazuh agent against accidental upgrades
+  ansible.builtin.dpkg_selections:
+    name: wazuh-agent
+    selection: hold
+
+- name: Enable the Wazuh agent
+  ansible.builtin.systemd_service:
+    name: wazuh-agent
+    enabled: true
+    state: started

@@ -72,6 +72,7 @@ Create one Bitwarden secret per value below. Replace each `CHANGE_ME_BWS_*_ID` i
 | Jenkins | Keycloak OIDC client secret, escape-hatch username and password, Dependency-Track API key |
 | Alertmanager | Telegram bot token and numeric chat ID |
 | K3s etcd | etcd S3 access key, secret key, bucket name, OVH endpoint host name, OVH region |
+| Wazuh `sec1` | central-component passwords, enrollment password, Restic password, dedicated S3 credentials, Cloudflare DNS token, Telegram bot token and group chat ID |
 | Argo CD | Keycloak OIDC client secret |
 | Longhorn | Keycloak OIDC client secret, OAuth2 Proxy cookie secret |
 | Headlamp | Keycloak OIDC client secret |
@@ -155,6 +156,7 @@ Keep an encrypted copy outside the cluster and outside Bitwarden. It must contai
 
 - K3s server token and the K3s S3 endpoint, region, bucket, access key, and secret key
 - Velero S3 credentials and Kopia repository password
+- Wazuh S3 credentials, permanent Restic repository password, and essential Wazuh recovery credentials
 - `gitlab-secrets.json`
 - Forgejo bootstrap administrator credentials
 - Jenkins OIDC escape-hatch credentials

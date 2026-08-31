@@ -1,0 +1,24 @@
+---
+- name: Configure high-signal Kubernetes API auditing
+  hosts: k3s_servers
+  become: true
+  tasks:
+    - name: Reconcile the K3s audit backend
+      ansible.builtin.include_tasks: ../tasks/k3s-audit.yml
+
+    - name: Apply the pending K3s restart
+      ansible.builtin.meta: flush_handlers
+
+    - name: Wait for the Kubernetes API after audit configuration
+      ansible.builtin.command: k3s kubectl get --raw=/readyz
+      register: k3s_audit_api_ready
+      retries: 30
+      delay: 5
+      until: k3s_audit_api_ready.rc == 0 and k3s_audit_api_ready.stdout is search('ok')
+      changed_when: false
+
+  handlers:
+    - name: Restart K3s
+      ansible.builtin.systemd_service:
+        name: k3s
+        state: restarted

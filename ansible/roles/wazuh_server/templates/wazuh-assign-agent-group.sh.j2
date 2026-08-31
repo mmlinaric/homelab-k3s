@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+if [[ $# -ne 2 ]]; then
+  echo "usage: $0 AGENT_NAME GROUP" >&2
+  exit 2
+fi
+
+agent_name="$1"
+group_name="$2"
+api="https://127.0.0.1:55000"
+
+token=$(curl --fail --silent --show-error --insecure \
+  -u "wazuh:${WAZUH_API_PASSWORD}" \
+  -X POST "${api}/security/user/authenticate?raw=true")
+
+agent_id=$(curl --fail --silent --show-error --insecure \
+  -H "Authorization: Bearer ${token}" \
+  "${api}/agents?name=${agent_name}&select=id,name" |
+  jq -r --arg name "${agent_name}" '.data.affected_items[] | select(.name == $name) | .id' |
+  head -1)
+
+if [[ -z "${agent_id}" ]]; then
+  echo "Agent ${agent_name} is not enrolled" >&2
+  exit 1
+fi
+
+if ! /var/ossec/bin/agent_groups -l -g "${group_name}" >/dev/null 2>&1; then
+  /var/ossec/bin/agent_groups -a -g "${group_name}" -q
+fi
+
+if /var/ossec/bin/agent_groups -s -i "${agent_id}" 2>/dev/null | grep -Fq "${group_name}"; then
+  echo "unchanged"
+else
+  /var/ossec/bin/agent_groups -a -i "${agent_id}" -g "${group_name}" -q
+  echo "changed"
+fi

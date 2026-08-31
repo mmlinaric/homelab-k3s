@@ -1,0 +1,24 @@
+---
+- name: Restart Wazuh manager
+  ansible.builtin.systemd_service:
+    name: wazuh-manager
+    state: restarted
+
+- name: Restart Wazuh indexer
+  ansible.builtin.systemd_service:
+    name: wazuh-indexer
+    state: restarted
+
+- name: Restart Wazuh dashboard
+  ansible.builtin.systemd_service:
+    name: wazuh-dashboard
+    state: restarted
+
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Restart journald
+  ansible.builtin.systemd_service:
+    name: systemd-journald
+    state: restarted

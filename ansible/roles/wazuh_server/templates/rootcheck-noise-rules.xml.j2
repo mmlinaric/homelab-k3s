@@ -1,0 +1,12 @@
+<group name="rootcheck,noise_tuning,">
+  <!-- Ubuntu's rust-coreutils package installs these commands through
+       alternatives.  Wazuh's legacy string signatures match strings embedded
+       in the Rust multicall binary even when dpkg verification is clean. -->
+  <rule id="100230" level="1">
+    <if_sid>510</if_sid>
+    <field name="title" type="pcre2">^Trojaned version of file detected\.$</field>
+    <field name="file" type="pcre2">^/(?:usr/)?bin/(?:cat|chgrp|chmod|chown|date|echo|env|ls|md5sum|uname)$</field>
+    <description>Verified rust-coreutils rootcheck heuristic false positive.</description>
+    <group>audit_benign,rootcheck_false_positive,</group>
+  </rule>
+</group>

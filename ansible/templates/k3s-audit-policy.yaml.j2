@@ -1,0 +1,113 @@
+apiVersion: audit.k8s.io/v1
+kind: Policy
+omitStages:
+  - RequestReceived
+omitManagedFields: true
+rules:
+  # Kubelets continuously read API objects; retain their mutations below but
+  # suppress routine reads before the sensitive-read rules are evaluated.
+  - level: None
+    userGroups: ["system:nodes"]
+    verbs: ["get", "list", "watch"]
+
+  - level: None
+    userGroups: ["system:serviceaccounts"]
+    verbs: ["get", "list", "watch"]
+    resources:
+      - group: ""
+        resources: ["secrets"]
+
+  - level: None
+    users: ["system:kube-controller-manager"]
+    resources:
+      - group: ""
+        resources: ["serviceaccounts/token"]
+  - level: None
+    userGroups: ["system:nodes"]
+    resources:
+      - group: ""
+        resources: ["serviceaccounts/token"]
+
+  # Human or workload reads of Secret metadata are security relevant. The
+  # Metadata level deliberately never records Secret values.
+  - level: Metadata
+    verbs: ["get", "list", "watch"]
+    resources:
+      - group: ""
+        resources: ["secrets"]
+
+  # Interactive access to running containers and token issuance are always
+  # retained, regardless of the caller.
+  - level: Metadata
+    resources:
+      - group: ""
+        resources:
+          - "pods/exec"
+          - "pods/attach"
+          - "pods/portforward"
+          - "serviceaccounts/token"
+
+  # Health checks, discovery, and ordinary reads dominate API traffic and do
+  # not add useful security signal in this homelab.
+  - level: None
+    nonResourceURLs:
+      - "/healthz*"
+      - "/livez*"
+      - "/readyz*"
+      - "/metrics"
+      - "/version"
+  - level: None
+    verbs: ["get", "list", "watch"]
+
+  - level: None
+    verbs: ["create"]
+    resources:
+      - group: "authorization.k8s.io"
+        resources:
+          - "subjectaccessreviews"
+          - "selfsubjectaccessreviews"
+          - "localsubjectaccessreviews"
+
+  # These controllers persist status in their primary custom resource instead
+  # of a /status subresource. Their update loops otherwise dominate the audit
+  # stream without representing operator changes.
+  - level: None
+    users:
+      - "system:serviceaccount:longhorn-system:longhorn-service-account"
+      - "system:serviceaccount:velero:velero-server"
+      - "system:serviceaccount:argocd:argocd-application-controller"
+      - "system:serviceaccount:cnpg-system:cloudnative-pg"
+      - "system:k3s-supervisor"
+    verbs: ["update", "patch"]
+    resources:
+      - group: "longhorn.io"
+      - group: "velero.io"
+      - group: "argoproj.io"
+      - group: "postgresql.cnpg.io"
+      - group: "k3s.cattle.io"
+
+  # Suppress routine controller bookkeeping while retaining configuration and
+  # workload mutations.
+  - level: None
+    verbs: ["create", "update", "patch", "delete", "deletecollection"]
+    resources:
+      - group: ""
+        resources: ["events", "endpoints", "pods/status"]
+      - group: "coordination.k8s.io"
+        resources: ["leases"]
+      - group: "discovery.k8s.io"
+        resources: ["endpointslices"]
+      - group: "apps"
+        resources:
+          - "deployments/status"
+          - "daemonsets/status"
+          - "statefulsets/status"
+          - "replicasets/status"
+      - group: "batch"
+        resources: ["jobs/status", "cronjobs/status"]
+
+  # Record all remaining API mutations without request or response bodies.
+  - level: Metadata
+    verbs: ["create", "update", "patch", "delete", "deletecollection"]
+
+  - level: None

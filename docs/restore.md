@@ -172,6 +172,17 @@ Reapply the kube-vip manifest if needed, verify the API through `192.168.60.5`, 
 
 Longhorn snapshots are only local recovery points. Use them for a recent rollback while the Longhorn storage system is healthy. Restore a snapshot to a new volume, mount it read-only in a test pod, and validate files before considering any production replacement. They do not replace the off-site GitLab, Forgejo, Keycloak, or etcd restore paths.
 
+## Wazuh sec1 recovery
+
+Wazuh recovery is VM-based and independent of Velero. Recreate `sec1` with
+OpenTofu, install the exact recorded Wazuh version, restore the selected Restic
+snapshot, validate `manager-current/SHA256SUMS`, and follow the ordered manager,
+security configuration, and OpenSearch snapshot procedure in `wazuh.md`.
+
+Use VM ID 320 and `192.168.60.220` for an isolated drill. Production DNS must
+continue resolving to the live VM, and the restored copy must not receive
+production agent traffic.
+
 ## Evidence to record
 
 For every drill, record the snapshot or backup ID, source timestamp, start and finish time, result, application version, data checks, and any manual intervention. Alerting proves a controller reported success. This evidence proves recovery works.

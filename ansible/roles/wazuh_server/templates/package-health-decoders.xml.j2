@@ -1,0 +1,7 @@
+<decoder name="sec1-package-status">
+  <parent>ossec</parent>
+  <prematch offset="after_parent">^output: 'package-status': sec1-package-status: </prematch>
+  <regex type="pcre2">host=(\S+) pending=(\d+) deferred=(\d+) security=(\d+) reboot_required=([01]) kernel=(\S+) newest_kernel=(\S+)</regex>
+  <order>hostname,package_pending,package_deferred,security_updates,reboot_required,kernel_running,kernel_newest</order>
+  <use_own_name>true</use_own_name>
+</decoder>

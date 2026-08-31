@@ -1,0 +1,19 @@
+[Unit]
+Description=Create and upload the sec1 Wazuh recovery point
+Wants=network-online.target
+After=network-online.target wazuh-indexer.service wazuh-manager.service filebeat.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/sec1-backup/restic.env
+Environment=XDG_CACHE_HOME=/root/.cache
+ExecStart=/usr/local/sbin/sec1-wazuh-backup
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+ProtectSystem=strict
+ReadWritePaths={{ wazuh_backup_mount }} /run /root/.cache/restic
+PrivateTmp=true
+NoNewPrivileges=true
+UMask=0077
+TimeoutStartSec=4h

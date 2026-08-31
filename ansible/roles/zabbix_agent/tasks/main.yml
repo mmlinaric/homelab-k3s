@@ -1,0 +1,125 @@
+---
+- name: Require a supported host platform for the pinned Zabbix agent
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ansible_distribution == 'Ubuntu' and ansible_distribution_version is version('26.04', '==')) or
+        (ansible_distribution == 'Debian' and ansible_distribution_major_version in ['12', '13'])
+    fail_msg: The pinned Zabbix Agent 2 package requires Ubuntu 26.04 or Debian 12/13.
+
+- name: Select the platform-specific Zabbix package build
+  ansible.builtin.set_fact:
+    zabbix_agent_package_version: >-
+      {{ zabbix_ubuntu_package_version if ansible_distribution == 'Ubuntu' else
+         (zabbix_debian12_package_version if ansible_distribution_major_version == '12' else zabbix_debian_package_version) }}
+    zabbix_agent_release_url: >-
+      {{ zabbix_ubuntu_release_url if ansible_distribution == 'Ubuntu' else
+         (zabbix_debian12_release_url if ansible_distribution_major_version == '12' else zabbix_debian_release_url) }}
+    zabbix_agent_release_sha256: >-
+      {{ zabbix_ubuntu_release_sha256 if ansible_distribution == 'Ubuntu' else
+         (zabbix_debian12_release_sha256 if ansible_distribution_major_version == '12' else zabbix_debian_release_sha256) }}
+    zabbix_agent_release_version: >-
+      {{ zabbix_ubuntu_release_version if ansible_distribution == 'Ubuntu' else
+         (zabbix_debian12_release_version if ansible_distribution_major_version == '12' else zabbix_debian_release_version) }}
+
+- name: Read the installed Zabbix repository package version
+  ansible.builtin.command:
+    argv: [dpkg-query, -W, '-f=${Version}', zabbix-release]
+  register: zabbix_installed_release
+  changed_when: false
+  failed_when: false
+
+- name: Remove an incompatible Zabbix repository definition
+  ansible.builtin.apt:
+    name: zabbix-release
+    state: absent
+    purge: true
+  when:
+    - zabbix_installed_release.rc == 0
+    - zabbix_installed_release.stdout != zabbix_agent_release_version
+
+- name: Download the pinned Zabbix repository package
+  ansible.builtin.get_url:
+    url: "{{ zabbix_agent_release_url }}"
+    dest: /usr/local/src/zabbix-release.deb
+    checksum: "sha256:{{ zabbix_agent_release_sha256 }}"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Install the Zabbix repository package
+  ansible.builtin.apt:
+    deb: /usr/local/src/zabbix-release.deb
+
+- name: Read the Zabbix Agent 2 package state
+  ansible.builtin.command:
+    argv: [dpkg-query, -W, '-f=${db:Status-Abbrev}', zabbix-agent2]
+  register: zabbix_agent_package_state
+  changed_when: false
+  failed_when: false
+
+- name: Ensure the Zabbix configuration directory exists for package recovery
+  ansible.builtin.file:
+    path: /etc/zabbix
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: zabbix_agent_package_state.stdout is not match('^[hi]i ')
+
+- name: Provide a valid bootstrap configuration for absent or interrupted packages
+  ansible.builtin.copy:
+    dest: /etc/zabbix/zabbix_agent2.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      LogType=system
+      Server=127.0.0.1
+      Hostname={{ inventory_hostname }}
+  when: zabbix_agent_package_state.stdout is not match('^[hi]i ')
+
+- name: Install pinned Zabbix Agent 2
+  ansible.builtin.apt:
+    name: "zabbix-agent2={{ zabbix_agent_package_version }}"
+    state: present
+    update_cache: true
+
+- name: Install the update-count helper
+  ansible.builtin.template:
+    src: zabbix-apt-update-count.j2
+    dest: /usr/local/sbin/zabbix-apt-update-count
+    owner: root
+    group: root
+    mode: '0755'
+  notify: Restart Zabbix agent 2
+
+- name: Write the active-agent PSK
+  ansible.builtin.copy:
+    content: "{{ zabbix_agent_psk | lower }}\n"
+    dest: /etc/zabbix/zabbix_agent2.psk
+    owner: zabbix
+    group: zabbix
+    mode: '0600'
+  no_log: true
+  notify: Restart Zabbix agent 2
+
+- name: Configure the encrypted active agent
+  ansible.builtin.template:
+    src: homelab.conf.j2
+    dest: /etc/zabbix/zabbix_agent2.conf
+    owner: root
+    group: zabbix
+    mode: '0640'
+  notify: Restart Zabbix agent 2
+
+- name: Hold Zabbix Agent 2 against accidental major upgrades
+  ansible.builtin.dpkg_selections:
+    name: zabbix-agent2
+    selection: hold
+
+- name: Enable Zabbix Agent 2
+  ansible.builtin.systemd_service:
+    name: zabbix-agent2
+    enabled: true
+    state: started

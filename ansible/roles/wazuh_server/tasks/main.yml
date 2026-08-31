@@ -1,0 +1,1137 @@
+---
+- name: Install sec1 operating-system prerequisites
+  ansible.builtin.apt:
+    name:
+      - auditd
+      - bzip2
+      - ca-certificates
+      - certbot
+      - curl
+      - e2fsprogs
+      - jq
+      - python3-certbot-dns-cloudflare
+      - qemu-guest-agent
+      - rsync
+      - systemd-timesyncd
+      - unattended-upgrades
+      - ufw
+    state: present
+    update_cache: true
+
+- name: Set the sec1 timezone
+  community.general.timezone:
+    name: Europe/Zagreb
+
+- name: Enable base services
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - auditd
+    - qemu-guest-agent
+    - systemd-timesyncd
+
+- name: Create the journald drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Persist the sec1 system journal
+  ansible.builtin.copy:
+    content: |-
+      [Journal]
+      Storage=persistent
+      Compress=yes
+      SystemMaxUse=1G
+    dest: /etc/systemd/journald.conf.d/60-sec1-persistent.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart journald
+
+- name: Enable automatic Ubuntu security updates
+  ansible.builtin.copy:
+    content: |-
+      Unattended-Upgrade::Allowed-Origins {
+        "${distro_id}:${distro_codename}-security";
+      };
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    dest: /etc/apt/apt.conf.d/52-sec1-security-upgrades
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Ensure the root SSH directory exists for audit monitoring
+  ansible.builtin.file:
+    path: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Install sec1 audit rules
+  ansible.builtin.template:
+    src: sec1-audit.rules.j2
+    dest: /etc/audit/rules.d/sec1-wazuh.rules
+    owner: root
+    group: root
+    mode: '0640'
+  register: sec1_audit_rules
+
+- name: Reload sec1 audit rules
+  ansible.builtin.command: augenrules --load
+  when: sec1_audit_rules.changed
+  changed_when: true
+
+- name: Find the backup disk by its OpenTofu serial
+  ansible.builtin.shell: >-
+    set -o pipefail;
+    lsblk -dn -o PATH,SERIAL |
+    awk '$2 == "{{ wazuh_backup_disk_serial }}" {print $1}'
+  args:
+    executable: /bin/bash
+  register: wazuh_backup_device_result
+  changed_when: false
+
+- name: Require exactly one backup disk
+  ansible.builtin.assert:
+    that:
+      - wazuh_backup_device_result.stdout_lines | length == 1
+      - wazuh_backup_device_result.stdout_lines[0] is match('^/dev/')
+    fail_msg: The dedicated disk with serial wazuh-backup was not found uniquely.
+
+- name: Create the backup filesystem
+  community.general.filesystem:
+    dev: "{{ wazuh_backup_device_result.stdout_lines[0] }}"
+    fstype: ext4
+    opts: -L sec1-backup
+
+- name: Ensure the backup filesystem has its stable label
+  ansible.builtin.command:
+    argv:
+      - e2label
+      - "{{ wazuh_backup_device_result.stdout_lines[0] }}"
+      - sec1-backup
+  changed_when: false
+
+- name: Mount the backup staging filesystem
+  ansible.posix.mount:
+    path: "{{ wazuh_backup_mount }}"
+    src: LABEL=sec1-backup
+    fstype: ext4
+    opts: defaults,nodev,nosuid,noexec
+    state: mounted
+
+- name: Create Wazuh installation workspace
+  ansible.builtin.file:
+    path: /root/wazuh-install
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Download the pinned Wazuh installation assistant
+  ansible.builtin.get_url:
+    url: "{{ wazuh_install_script_url }}"
+    dest: /root/wazuh-install/wazuh-install.sh
+    checksum: "sha256:{{ wazuh_install_script_sha256 }}"
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Write the all-in-one installation topology
+  ansible.builtin.template:
+    src: config.yml.j2
+    dest: /root/wazuh-install/config.yml
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Check whether the pinned Wazuh version is installed
+  ansible.builtin.command: dpkg-query -W -f=${Version} wazuh-manager
+  register: wazuh_installed_version
+  changed_when: false
+  failed_when: false
+
+- name: Install Wazuh through its canonical assistant
+  when: wazuh_installed_version.rc != 0
+  block:
+    - name: Generate the Wazuh certificate and configuration archive
+      ansible.builtin.command:
+        argv:
+          - /root/wazuh-install/wazuh-install.sh
+          - --generate-config-files
+          - --config-file
+          - /root/wazuh-install/config.yml
+      args:
+        chdir: /root/wazuh-install
+        creates: /root/wazuh-install/wazuh-install-files.tar
+      no_log: true
+
+    - name: Extract the generated installation archive
+      ansible.builtin.unarchive:
+        src: /root/wazuh-install/wazuh-install-files.tar
+        dest: /root/wazuh-install
+        remote_src: true
+        creates: /root/wazuh-install/wazuh-install-files/root-ca.pem
+      no_log: true
+
+    - name: Replace generated passwords with Bitwarden-managed values
+      ansible.builtin.template:
+        src: wazuh-passwords.txt.j2
+        dest: /root/wazuh-install/wazuh-install-files/wazuh-passwords.txt
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+
+    - name: Build the deterministic installation archive
+      community.general.archive:
+        path: /root/wazuh-install/wazuh-install-files
+        dest: /root/wazuh-install/wazuh-install-files-managed.tar
+        format: gz
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+
+    - name: Run the pinned all-in-one installation
+      ansible.builtin.command:
+        argv:
+          - /root/wazuh-install/wazuh-install.sh
+          - --all-in-one
+          - --tar
+          - /root/wazuh-install/wazuh-install-files-managed.tar
+      args:
+        chdir: /root/wazuh-install
+        creates: /var/ossec/bin/wazuh-control
+      no_log: true
+
+- name: Gather installed package versions
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: Require the intended central-component versions
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.packages[item] | default([]) | length > 0
+      - ansible_facts.packages[item][0].version is match('^' + wazuh_version | regex_escape)
+    fail_msg: "{{ item }} is absent or does not match Wazuh {{ wazuh_version }}."
+  loop:
+    - wazuh-indexer
+    - wazuh-manager
+    - wazuh-dashboard
+
+- name: Hold central Wazuh packages against accidental upgrades
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - wazuh-indexer
+    - wazuh-manager
+    - wazuh-dashboard
+    - filebeat
+
+- name: Preserve the bootstrap installation archive for credential reconciliation
+  block:
+    - name: Create the Wazuh recovery directory
+      ansible.builtin.file:
+        path: /etc/wazuh-recovery
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Copy the bootstrap installation archive once
+      ansible.builtin.copy:
+        src: /root/wazuh-install/wazuh-install-files-managed.tar
+        dest: /etc/wazuh-recovery/wazuh-install-files.tar
+        remote_src: true
+        force: false
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+
+- name: Remove superseded installer plaintext artifacts
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /root/wazuh-install/wazuh-install-files
+    - /root/wazuh-install/wazuh-install-files.tar
+  no_log: true
+
+- name: Download the pinned Wazuh password management tool
+  ansible.builtin.get_url:
+    url: "{{ wazuh_password_tool_url }}"
+    dest: /root/wazuh-install/wazuh-passwords-tool.sh
+    checksum: "sha256:{{ wazuh_password_tool_sha256 }}"
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Check the intended indexer administrator credential
+  ansible.builtin.uri:
+    url: https://127.0.0.1:9200/
+    url_username: admin
+    url_password: "{{ wazuh_indexer_passwords.admin }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200, 401, 403]
+  register: wazuh_managed_indexer_auth
+  failed_when: wazuh_managed_indexer_auth.status not in [200, 401, 403]
+  no_log: true
+
+- name: Check whether the recovery archive contains managed credentials
+  ansible.builtin.stat:
+    path: /etc/wazuh-recovery/.managed-credentials
+  register: wazuh_managed_recovery_marker
+
+- name: Reconcile generated Wazuh credentials with Bitwarden
+  when: >-
+    wazuh_managed_indexer_auth.status != 200 or
+    not wazuh_managed_recovery_marker.stat.exists
+  block:
+    - name: Write the Bitwarden-managed password file
+      ansible.builtin.template:
+        src: wazuh-passwords.txt.j2
+        dest: /root/wazuh-install/wazuh-passwords-managed.txt
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+
+    - name: Rotate indexer and API credentials with the canonical tool
+      ansible.builtin.shell: |
+        set -Eeuo pipefail
+        current_api_password=$(
+          tar -xOf /etc/wazuh-recovery/wazuh-install-files.tar \
+            wazuh-install-files/wazuh-passwords.txt |
+          awk "/api_username: 'wazuh'/{seen=1; next} seen && /api_password:/{gsub(/'/, \"\", \$2); print \$2; exit}"
+        )
+        test -n "${current_api_password}"
+        /root/wazuh-install/wazuh-passwords-tool.sh \
+          --file /root/wazuh-install/wazuh-passwords-managed.txt
+        /root/wazuh-install/wazuh-passwords-tool.sh \
+          --file /root/wazuh-install/wazuh-passwords-managed.txt \
+          --api --admin-user wazuh --admin-password "${current_api_password}"
+      args:
+        executable: /bin/bash
+      when: wazuh_managed_indexer_auth.status != 200
+      no_log: true
+
+    - name: Create the recovery archive rebuild directory
+      ansible.builtin.file:
+        path: /root/wazuh-install/recovery-managed
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Extract the bootstrap recovery archive
+      ansible.builtin.unarchive:
+        src: /etc/wazuh-recovery/wazuh-install-files.tar
+        dest: /root/wazuh-install/recovery-managed
+        remote_src: true
+      no_log: true
+
+    - name: Replace bootstrap passwords in the recovery archive
+      ansible.builtin.copy:
+        src: /root/wazuh-install/wazuh-passwords-managed.txt
+        dest: /root/wazuh-install/recovery-managed/wazuh-install-files/wazuh-passwords.txt
+        remote_src: true
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+
+    - name: Rebuild the managed recovery archive
+      community.general.archive:
+        path: /root/wazuh-install/recovery-managed/wazuh-install-files
+        dest: /etc/wazuh-recovery/wazuh-install-files.tar
+        format: gz
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+
+    - name: Mark the recovery archive as Bitwarden-managed
+      ansible.builtin.copy:
+        content: "Wazuh {{ wazuh_version }} credentials reconciled\n"
+        dest: /etc/wazuh-recovery/.managed-credentials
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Remove credential rotation plaintext workspace
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /root/wazuh-install/wazuh-passwords-managed.txt
+        - /root/wazuh-install/recovery-managed
+      no_log: true
+
+- name: Validate the managed indexer administrator credential
+  ansible.builtin.uri:
+    url: https://127.0.0.1:9200/
+    url_username: admin
+    url_password: "{{ wazuh_indexer_passwords.admin }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: 200
+  no_log: true
+
+- name: Validate the managed Wazuh API administrator credential
+  ansible.builtin.uri:
+    url: https://127.0.0.1:55000/security/user/authenticate?raw=true
+    method: POST
+    url_username: wazuh
+    url_password: "{{ wazuh_api_passwords.wazuh }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: 200
+  no_log: true
+
+- name: Restrict the Wazuh installer log
+  ansible.builtin.file:
+    path: /var/log/wazuh-install.log
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Configure password-protected agent enrollment
+  ansible.builtin.copy:
+    content: "{{ wazuh_enrollment_password }}\n"
+    dest: /var/ossec/etc/authd.pass
+    owner: root
+    group: wazuh
+    mode: '0640'
+  no_log: true
+  notify: Restart Wazuh manager
+
+- name: Require enrollment passwords in the manager configuration
+  ansible.builtin.replace:
+    path: /var/ossec/etc/ossec.conf
+    regexp: '<use_password>no</use_password>'
+    replace: '<use_password>yes</use_password>'
+  notify: Restart Wazuh manager
+
+- name: Monitor the sec1 audit log locally
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: '<!-- {mark} ANSIBLE MANAGED SEC1 AUDIT -->'
+    insertbefore: '</ossec_config>'
+    block: |2
+        <localfile>
+          <log_format>audit</log_format>
+          <location>/var/log/audit/audit.log</location>
+        </localfile>
+  notify: Restart Wazuh manager
+
+- name: Accept syslog only from the RB5009 management address
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: '<!-- {mark} ANSIBLE MANAGED ROUTEROS SYSLOG -->'
+    insertbefore: '</ossec_config>'
+    block: |2
+        <remote>
+          <connection>syslog</connection>
+          <port>{{ wazuh_routeros_syslog_port }}</port>
+          <protocol>udp</protocol>
+          <allowed-ips>{{ wazuh_routeros_syslog_source }}</allowed-ips>
+          <local_ip>{{ wazuh_server_address }}</local_ip>
+        </remote>
+  notify: Restart Wazuh manager
+  tags: [routeros_syslog]
+
+- name: Install the RouterOS event decoder
+  ansible.builtin.template:
+    src: routeros-decoder.xml.j2
+    dest: /var/ossec/etc/decoders/routeros_decoder.xml
+    owner: root
+    group: wazuh
+    mode: '0660'
+  notify: Restart Wazuh manager
+  tags: [routeros_syslog]
+
+- name: Install RouterOS alert rules
+  ansible.builtin.template:
+    src: routeros-rules.xml.j2
+    dest: /var/ossec/etc/rules/routeros_rules.xml
+    owner: root
+    group: wazuh
+    mode: '0660'
+  notify: Restart Wazuh manager
+  tags: [noise_tuning, routeros_syslog]
+
+- name: Install Kubernetes API audit alert rules
+  ansible.builtin.template:
+    src: kubernetes-audit-rules.xml.j2
+    dest: /var/ossec/etc/rules/kubernetes_audit_rules.xml
+    owner: root
+    group: wazuh
+    mode: '0660'
+  notify: Restart Wazuh manager
+  tags: [kubernetes_audit, noise_tuning]
+
+- name: Install verified rootcheck noise tuning rules
+  ansible.builtin.template:
+    src: rootcheck-noise-rules.xml.j2
+    dest: /var/ossec/etc/rules/rootcheck_noise_rules.xml
+    owner: root
+    group: wazuh
+    mode: '0660'
+  notify: Restart Wazuh manager
+  tags: [noise_tuning]
+
+- name: Install K3s CNI audit alert tuning rules
+  ansible.builtin.template:
+    src: k3s-cni-audit-rules.xml.j2
+    dest: /var/ossec/etc/rules/k3s_cni_audit_rules.xml
+    owner: root
+    group: wazuh
+    mode: '0660'
+  notify: Restart Wazuh manager
+  tags: [kubernetes_audit]
+
+- name: Write Wazuh Telegram alert credentials when supplied
+  ansible.builtin.template:
+    src: telegram-alert.env.j2
+    dest: /var/ossec/etc/telegram-alert.env
+    owner: root
+    group: wazuh
+    mode: '0640'
+  when:
+    - wazuh_telegram_bot_token | default('') | length > 0
+    - wazuh_telegram_chat_id | default('') | length > 0
+  no_log: true
+  tags: [telegram_alerts]
+
+- name: Check Wazuh Telegram alert credentials
+  ansible.builtin.stat:
+    path: /var/ossec/etc/telegram-alert.env
+  register: wazuh_telegram_alert_credentials
+  tags: [telegram_alerts]
+
+- name: Require Wazuh Telegram alert credentials
+  ansible.builtin.assert:
+    that:
+      - wazuh_telegram_alert_credentials.stat.exists
+      - wazuh_telegram_alert_credentials.stat.pw_name == 'root'
+      - wazuh_telegram_alert_credentials.stat.gr_name == 'wazuh'
+      - wazuh_telegram_alert_credentials.stat.mode == '0640'
+    fail_msg: >-
+      /var/ossec/etc/telegram-alert.env is missing or insecure. Run the playbook
+      with WAZUH_TELEGRAM_BOT_TOKEN and WAZUH_TELEGRAM_CHAT_ID supplied by BWS.
+  tags: [telegram_alerts]
+
+- name: Install the high-severity Telegram integration
+  ansible.builtin.template:
+    src: custom-telegram.py.j2
+    dest: /var/ossec/integrations/custom-telegram
+    owner: root
+    group: wazuh
+    mode: '0750'
+  tags: [operator_experience, telegram_alerts]
+
+- name: Enable actionable Telegram notifications
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: '<!-- {mark} ANSIBLE MANAGED TELEGRAM ALERTS -->'
+    insertbefore: '</ossec_config>'
+    block: |2
+        <integration>
+          <name>custom-telegram</name>
+          <level>10</level>
+          <alert_format>json</alert_format>
+        </integration>
+        <integration>
+          <name>custom-telegram</name>
+          <rule_id>{{ wazuh_actionable_telegram_rule_ids | join(',') }}</rule_id>
+          <alert_format>json</alert_format>
+        </integration>
+  notify: Restart Wazuh manager
+  tags: [operator_experience, telegram_alerts]
+
+- name: Install the weekly Wazuh operator digest
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - src: wazuh-weekly-digest.py.j2
+      dest: /usr/local/sbin/wazuh-weekly-digest
+      mode: '0750'
+    - src: wazuh-weekly-digest.service.j2
+      dest: /etc/systemd/system/wazuh-weekly-digest.service
+      mode: '0644'
+    - src: wazuh-weekly-digest.timer.j2
+      dest: /etc/systemd/system/wazuh-weekly-digest.timer
+      mode: '0644'
+  notify: Reload systemd
+  tags: [operator_experience]
+
+- name: Enable the weekly Wazuh operator digest
+  ansible.builtin.systemd_service:
+    name: wazuh-weekly-digest.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  tags: [operator_experience]
+
+- name: Add high-signal paths to sec1 file integrity monitoring
+  ansible.builtin.lineinfile:
+    path: /var/ossec/etc/ossec.conf
+    insertafter: '<directories>/bin,/sbin,/boot</directories>'
+    line: '    <directories check_all="yes" realtime="yes">/root,/usr/local/bin,/usr/local/sbin</directories>'
+  notify: Restart Wazuh manager
+  tags: [malware_detection]
+
+- name: Install local malware detection alert rules
+  ansible.builtin.template:
+    src: malware-rules.xml.j2
+    dest: /var/ossec/etc/rules/sec1_malware_rules.xml
+    owner: root
+    group: wazuh
+    mode: '0640'
+  notify: Restart Wazuh manager
+  tags: [malware_detection, operator_experience]
+
+- name: Install package posture decoders and rules
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: wazuh
+    mode: '0640'
+  loop:
+    - src: package-health-decoders.xml.j2
+      dest: /var/ossec/etc/decoders/package_health_decoders.xml
+    - src: package-health-rules.xml.j2
+      dest: /var/ossec/etc/rules/package_health_rules.xml
+  notify: Restart Wazuh manager
+  tags: [operator_experience, package_hygiene]
+
+- name: Include sec1 in vulnerability detection
+  ansible.builtin.lineinfile:
+    path: /var/ossec/etc/local_internal_options.conf
+    regexp: '^vulnerability-detection\.disable_scan_manager='
+    line: 'vulnerability-detection.disable_scan_manager=0'
+    create: true
+    owner: root
+    group: wazuh
+    mode: '0640'
+  notify: Restart Wazuh manager
+  tags: [operator_experience, package_hygiene]
+
+- name: Monitor local package and reboot posture
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: '<!-- {mark} ANSIBLE MANAGED PACKAGE POSTURE -->'
+    insertbefore: '</ossec_config>'
+    block: |2
+        <localfile>
+          <log_format>command</log_format>
+          <command>/usr/local/sbin/sec1-package-status</command>
+          <frequency>21600</frequency>
+          <alias>package-status</alias>
+        </localfile>
+  notify: Restart Wazuh manager
+  tags: [operator_experience, package_hygiene]
+
+- name: Trigger local YARA scans for new and modified FIM files
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: '<!-- {mark} ANSIBLE MANAGED YARA ACTIVE RESPONSE -->'
+    insertbefore: '</ossec_config>'
+    block: |2
+        <command>
+          <name>sec1-yara</name>
+          <executable>sec1-yara-scan</executable>
+          <timeout_allowed>no</timeout_allowed>
+        </command>
+        <active-response>
+          <disabled>no</disabled>
+          <command>sec1-yara</command>
+          <location>local</location>
+          <rules_id>{{ wazuh_yara_fim_rule_ids }}</rules_id>
+        </active-response>
+  notify: Restart Wazuh manager
+  tags: [malware_detection]
+
+- name: Create the RouterOS security saved search
+  ansible.builtin.uri:
+    url: >-
+      https://127.0.0.1/api/saved_objects/search/{{ wazuh_routeros_saved_search_id }}?overwrite=true
+    method: POST
+    url_username: admin
+    url_password: "{{ wazuh_indexer_passwords.admin }}"
+    force_basic_auth: true
+    validate_certs: false
+    headers:
+      osd-xsrf: ansible
+    body_format: json
+    body:
+      attributes:
+        title: RouterOS Security Events
+        description: RouterOS events decoded and classified by sec1 Wazuh
+        hits: 0
+        columns:
+          - timestamp
+          - rule.level
+          - rule.description
+          - location
+          - full_log
+        sort:
+          - [timestamp, desc]
+        version: 1
+        kibanaSavedObjectMeta:
+          searchSourceJSON: >-
+            {"query":{"query":"decoder.name: routeros","language":"kuery"},
+            "filter":[],"highlightAll":true,"version":true,
+            "indexRefName":"kibanaSavedObjectMeta.searchSourceJSON.index"}
+      references:
+        - name: kibanaSavedObjectMeta.searchSourceJSON.index
+          type: index-pattern
+          id: wazuh-alerts-*
+    status_code: [200, 201]
+  changed_when: false
+  no_log: true
+  tags: [dashboard_objects]
+
+- name: Create the RouterOS security dashboard
+  ansible.builtin.uri:
+    url: >-
+      https://127.0.0.1/api/saved_objects/dashboard/{{ wazuh_routeros_dashboard_id }}?overwrite=true
+    method: POST
+    url_username: admin
+    url_password: "{{ wazuh_indexer_passwords.admin }}"
+    force_basic_auth: true
+    validate_certs: false
+    headers:
+      osd-xsrf: ansible
+    body_format: json
+    body:
+      attributes:
+        title: RouterOS Security Monitoring
+        description: Investigation view for RouterOS events received by sec1
+        hits: 0
+        panelsJSON: >-
+          [{"embeddableConfig":{},"gridData":{"h":22,"i":"1","w":48,"x":0,"y":0},"panelIndex":"1","version":"2.19.5","panelRefName":"panel_0"}]
+        optionsJSON: '{"useMargins":true,"hidePanelTitles":false}'
+        version: 1
+        timeRestore: false
+        kibanaSavedObjectMeta:
+          searchSourceJSON: '{"query":{"query":"","language":"kuery"},"filter":[]}'
+      references:
+        - name: panel_0
+          type: search
+          id: "{{ wazuh_routeros_saved_search_id }}"
+    status_code: [200, 201]
+  changed_when: false
+  no_log: true
+  tags: [dashboard_objects]
+
+- name: Create the K3s security activity saved search
+  ansible.builtin.uri:
+    url: >-
+      https://127.0.0.1/api/saved_objects/search/{{ wazuh_kubernetes_saved_search_id }}?overwrite=true
+    method: POST
+    url_username: admin
+    url_password: "{{ wazuh_indexer_passwords.admin }}"
+    force_basic_auth: true
+    validate_certs: false
+    headers:
+      osd-xsrf: ansible
+    body_format: json
+    body:
+      attributes:
+        title: K3s Security Activity
+        description: High-signal Kubernetes API audit events from k3s-01
+        hits: 0
+        columns:
+          - timestamp
+          - rule.level
+          - rule.description
+          - data.verb
+          - data.user.username
+          - data.objectRef.resource
+          - data.objectRef.namespace
+          - data.objectRef.name
+          - data.sourceIPs
+        sort:
+          - [timestamp, desc]
+        version: 1
+        kibanaSavedObjectMeta:
+          searchSourceJSON: >-
+            {"query":{"query":"rule.groups: kubernetes_audit","language":"kuery"},
+            "filter":[],"highlightAll":true,"version":true,
+            "indexRefName":"kibanaSavedObjectMeta.searchSourceJSON.index"}
+      references:
+        - name: kibanaSavedObjectMeta.searchSourceJSON.index
+          type: index-pattern
+          id: wazuh-alerts-*
+    status_code: [200, 201]
+  when: wazuh_indexer_passwords.admin | default('') | length > 0
+  changed_when: false
+  no_log: true
+  tags: [kubernetes_audit, dashboard_objects]
+
+- name: Create the K3s security monitoring dashboard
+  ansible.builtin.uri:
+    url: >-
+      https://127.0.0.1/api/saved_objects/dashboard/{{ wazuh_kubernetes_dashboard_id }}?overwrite=true
+    method: POST
+    url_username: admin
+    url_password: "{{ wazuh_indexer_passwords.admin }}"
+    force_basic_auth: true
+    validate_certs: false
+    headers:
+      osd-xsrf: ansible
+    body_format: json
+    body:
+      attributes:
+        title: K3s Security Monitoring
+        description: Kubernetes API security activity received by sec1
+        hits: 0
+        panelsJSON: >-
+          [{"embeddableConfig":{},"gridData":{"h":22,"i":"1","w":48,"x":0,"y":0},"panelIndex":"1","version":"2.19.5","panelRefName":"panel_0"}]
+        optionsJSON: '{"useMargins":true,"hidePanelTitles":false}'
+        version: 1
+        timeRestore: false
+        kibanaSavedObjectMeta:
+          searchSourceJSON: '{"query":{"query":"","language":"kuery"},"filter":[]}'
+      references:
+        - name: panel_0
+          type: search
+          id: "{{ wazuh_kubernetes_saved_search_id }}"
+    status_code: [200, 201]
+  when: wazuh_indexer_passwords.admin | default('') | length > 0
+  changed_when: false
+  no_log: true
+  tags: [kubernetes_audit, dashboard_objects]
+
+- name: Install the homelab security cockpit publisher
+  ansible.builtin.template:
+    src: wazuh-dashboard-cockpit.js.j2
+    dest: /usr/local/sbin/sec1-wazuh-dashboard-cockpit
+    owner: root
+    group: root
+    mode: '0700'
+  tags: [dashboard_objects, operator_experience]
+
+- name: Publish the homelab security cockpit
+  ansible.builtin.command: /usr/local/sbin/sec1-wazuh-dashboard-cockpit
+  register: wazuh_cockpit_publish
+  changed_when: false
+  no_log: true
+  tags: [dashboard_objects, operator_experience]
+
+- name: Register declarative Wazuh agent groups
+  ansible.builtin.command:
+    argv:
+      - /var/ossec/bin/agent_groups
+      - -a
+      - -g
+      - "{{ item }}"
+      - -q
+  loop:
+    - linux-server
+    - proxmox
+  register: wazuh_group_create
+  changed_when: "'created' in wazuh_group_create.stdout"
+  failed_when:
+    - wazuh_group_create.rc != 0
+    - "'already exists' not in (wazuh_group_create.stdout + wazuh_group_create.stderr)"
+
+- name: Secure declarative Wazuh agent group directories
+  ansible.builtin.file:
+    path: "/var/ossec/etc/shared/{{ item }}"
+    state: directory
+    owner: root
+    group: wazuh
+    mode: '0770'
+  loop:
+    - linux-server
+    - proxmox
+
+- name: Install shared agent policy
+  ansible.builtin.template:
+    src: "{{ item }}-agent.conf.j2"
+    dest: "/var/ossec/etc/shared/{{ item }}/agent.conf"
+    owner: root
+    group: wazuh
+    mode: '0660'
+  loop:
+    - linux-server
+    - proxmox
+  notify: Restart Wazuh manager
+  tags: [agent_policy, kubernetes_audit, malware_detection, noise_tuning, operator_experience, package_hygiene]
+
+- name: Preserve rootcheck signatures in declarative agent groups
+  ansible.builtin.copy:
+    src: "/var/ossec/etc/shared/default/{{ item.1 }}"
+    dest: "/var/ossec/etc/shared/{{ item.0 }}/{{ item.1 }}"
+    remote_src: true
+    owner: wazuh
+    group: wazuh
+    mode: '0660'
+  loop: "{{ ['linux-server', 'proxmox'] | product(['rootkit_files.txt', 'rootkit_trojans.txt']) | list }}"
+  notify: Restart Wazuh manager
+  tags: [agent_policy, noise_tuning, operator_experience, package_hygiene]
+
+- name: Create backup and repository directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ wazuh_backup_mount }}/indexer-repository", owner: wazuh-indexer, group: wazuh-indexer, mode: '0750'}
+    - {path: "{{ wazuh_backup_mount }}/manager-current", owner: root, group: root, mode: '0700'}
+    - {path: /etc/sec1-backup, owner: root, group: root, mode: '0700'}
+    - {path: /root/.cache/restic, owner: root, group: root, mode: '0700'}
+
+- name: Permit the indexer filesystem snapshot repository
+  ansible.builtin.lineinfile:
+    path: /etc/wazuh-indexer/opensearch.yml
+    regexp: '^path\.repo:'
+    line: 'path.repo: ["{{ wazuh_backup_mount }}/indexer-repository"]'
+  notify: Restart Wazuh indexer
+
+- name: Apply pending indexer restart before API configuration
+  ansible.builtin.meta: flush_handlers
+
+- name: Inspect the indexed-alert retention policy
+  ansible.builtin.uri:
+    url: https://127.0.0.1:9200/_plugins/_ism/policies/wazuh-alert-retention-policy
+    method: GET
+    url_username: admin
+    url_password: "{{ wazuh_indexer_passwords.admin }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200, 404]
+  register: wazuh_retention_policy
+  changed_when: false
+  no_log: true
+
+- name: Configure 30-day indexed-alert retention
+  ansible.builtin.uri:
+    url: >-
+      https://127.0.0.1:9200/_plugins/_ism/policies/wazuh-alert-retention-policy{{
+      ('?if_seq_no=' ~ wazuh_retention_policy.json._seq_no ~
+       '&if_primary_term=' ~ wazuh_retention_policy.json._primary_term)
+      if wazuh_retention_policy.status == 200 else '' }}
+    method: PUT
+    url_username: admin
+    url_password: "{{ wazuh_indexer_passwords.admin }}"
+    force_basic_auth: true
+    validate_certs: false
+    body_format: json
+    body:
+      policy:
+        description: Delete Wazuh alert indices after 30 days
+        schema_version: 17
+        default_state: retention
+        states:
+          - name: retention
+            actions: []
+            transitions:
+              - state_name: delete
+                conditions:
+                  min_index_age: 30d
+          - name: delete
+            actions:
+              - retry: {count: 3, backoff: exponential, delay: 1m}
+                delete: {}
+            transitions: []
+        ism_template:
+          - index_patterns: [wazuh-alerts-*]
+            priority: 100
+    status_code: [200, 201]
+  no_log: true
+
+- name: Install the pinned Restic archive
+  ansible.builtin.get_url:
+    url: "https://github.com/restic/restic/releases/download/v{{ wazuh_restic_version }}/restic_{{ wazuh_restic_version }}_linux_amd64.bz2"
+    dest: "/usr/local/src/restic_{{ wazuh_restic_version }}_linux_amd64.bz2"
+    checksum: "sha256:{{ wazuh_restic_sha256 }}"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Decompress the pinned Restic binary
+  ansible.builtin.command:
+    argv:
+      - bzip2
+      - --decompress
+      - --keep
+      - "/usr/local/src/restic_{{ wazuh_restic_version }}_linux_amd64.bz2"
+    creates: "/usr/local/src/restic_{{ wazuh_restic_version }}_linux_amd64"
+
+- name: Install Restic into PATH
+  ansible.builtin.copy:
+    src: "/usr/local/src/restic_{{ wazuh_restic_version }}_linux_amd64"
+    dest: /usr/local/bin/restic
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Write root-only backup credentials
+  ansible.builtin.template:
+    src: restic.env.j2
+    dest: /etc/sec1-backup/restic.env
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+
+- name: Inspect the Restic repository
+  ansible.builtin.command: timeout 120 /usr/local/bin/restic snapshots --json
+  environment:
+    RESTIC_REPOSITORY: "{{ wazuh_restic_repository }}"
+    RESTIC_PASSWORD: "{{ wazuh_restic_password }}"
+    AWS_ACCESS_KEY_ID: "{{ wazuh_s3_access_key }}"
+    AWS_SECRET_ACCESS_KEY: "{{ wazuh_s3_secret_key }}"
+    AWS_DEFAULT_REGION: "{{ wazuh_s3_region }}"
+  register: wazuh_restic_repository_status
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Initialize the encrypted Restic repository
+  ansible.builtin.command: timeout 120 /usr/local/bin/restic init
+  environment:
+    RESTIC_REPOSITORY: "{{ wazuh_restic_repository }}"
+    RESTIC_PASSWORD: "{{ wazuh_restic_password }}"
+    AWS_ACCESS_KEY_ID: "{{ wazuh_s3_access_key }}"
+    AWS_SECRET_ACCESS_KEY: "{{ wazuh_s3_secret_key }}"
+    AWS_DEFAULT_REGION: "{{ wazuh_s3_region }}"
+  when: wazuh_restic_repository_status.rc != 0
+  no_log: true
+
+- name: Install backup and agent-group utilities
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: '0750'
+  loop:
+    - {src: wazuh-backup.sh.j2, dest: /usr/local/sbin/sec1-wazuh-backup}
+    - {src: wazuh-assign-agent-group.sh.j2, dest: /usr/local/sbin/wazuh-assign-agent-group}
+  tags: [malware_detection]
+
+- name: Install Wazuh backup systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - sec1-wazuh-backup.service
+    - sec1-wazuh-backup.timer
+  notify: Reload systemd
+
+- name: Create Cloudflare DNS credentials for Certbot
+  ansible.builtin.copy:
+    content: "dns_cloudflare_api_token = {{ wazuh_cloudflare_api_token }}\n"
+    dest: /etc/letsencrypt/cloudflare.ini
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+
+- name: Obtain the internal dashboard certificate with DNS-01
+  ansible.builtin.command:
+    argv:
+      - certbot
+      - certonly
+      - --dns-cloudflare
+      - --dns-cloudflare-credentials
+      - /etc/letsencrypt/cloudflare.ini
+      - --non-interactive
+      - --agree-tos
+      - --email
+      - "{{ wazuh_acme_email }}"
+      - --domain
+      - "{{ wazuh_dashboard_hostname }}"
+  args:
+    creates: "/etc/letsencrypt/live/{{ wazuh_dashboard_hostname }}/fullchain.pem"
+
+- name: Install the dashboard certificate deployment hook
+  ansible.builtin.template:
+    src: wazuh-dashboard-cert-deploy.sh.j2
+    dest: /etc/letsencrypt/renewal-hooks/deploy/wazuh-dashboard
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Point the dashboard at its public-trust certificate
+  ansible.builtin.lineinfile:
+    path: /etc/wazuh-dashboard/opensearch_dashboards.yml
+    regexp: "^{{ item.key | regex_escape }}:"
+    line: "{{ item.key }}: {{ item.value }}"
+  loop:
+    - {key: server.ssl.certificate, value: /etc/wazuh-dashboard/certs/public.pem}
+    - {key: server.ssl.key, value: /etc/wazuh-dashboard/certs/public-key.pem}
+  notify: Restart Wazuh dashboard
+
+- name: Deploy the current dashboard certificate
+  ansible.builtin.command: /etc/letsencrypt/renewal-hooks/deploy/wazuh-dashboard
+  changed_when: false
+
+- name: Allow administrator SSH and dashboard access
+  community.general.ufw:
+    rule: allow
+    src: "{{ item.0 }}"
+    port: "{{ item.1 }}"
+    proto: tcp
+  loop: "{{ wazuh_admin_sources | product(['22', '443']) | list }}"
+
+- name: Allow Wazuh agent and enrollment traffic
+  community.general.ufw:
+    rule: allow
+    src: "{{ item.0 }}"
+    port: "{{ item.1 }}"
+    proto: tcp
+  loop: "{{ wazuh_agent_sources | product(['1514', '1515']) | list }}"
+
+- name: Allow RouterOS syslog from the RB5009 only
+  community.general.ufw:
+    rule: allow
+    src: "{{ wazuh_routeros_syslog_source }}"
+    port: "{{ wazuh_routeros_syslog_port | string }}"
+    proto: udp
+  tags: [routeros_syslog]
+
+- name: Set host firewall defaults
+  community.general.ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - {direction: incoming, policy: deny}
+    - {direction: outgoing, policy: allow}
+
+- name: Enable the host firewall
+  community.general.ufw:
+    state: enabled
+
+- name: Enable the nightly backup timer
+  ansible.builtin.systemd_service:
+    name: sec1-wazuh-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true

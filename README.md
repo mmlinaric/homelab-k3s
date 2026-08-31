@@ -28,6 +28,7 @@ The first node is `192.168.60.10`. MetalLB assigns `192.168.60.100` to Traefik, 
 | Path | Purpose |
 | --- | --- |
 | `ansible/` | Agentless Ubuntu and K3s bootstrap |
+| `infra/` | OpenTofu definitions for Proxmox virtual machines |
 | `bootstrap/` | Root Argo CD Application |
 | `clusters/homelab/` | App of apps definitions and pinned Helm releases |
 | `platform/` | Shared networking, certificates, secrets, storage, and monitoring config |
@@ -35,6 +36,7 @@ The first node is `192.168.60.10`. MetalLB assigns `192.168.60.100` to Traefik, 
 | `recovery/` | Isolated, manually applied disaster recovery overlays |
 | `scripts/` | Local validation and migration export helpers |
 | `docs/` | Bootstrap, secrets, migration, restore, and scaling runbooks |
+| `network-docs/` | Network topology, VLAN migration, RouterOS/SwOS hardening, and physical recovery documentation |
 
 ## Start here
 
@@ -43,6 +45,10 @@ The first node is `192.168.60.10`. MetalLB assigns `192.168.60.100` to Traefik, 
 3. Confirm the new services using temporary local DNS overrides.
 4. Follow [docs/migration.md](docs/migration.md) for the cutover.
 5. Run a restore drill using [docs/restore.md](docs/restore.md).
+
+Operational monitoring is deployed separately on `ops1`; see
+[docs/zabbix.md](docs/zabbix.md). Security monitoring and recovery are covered
+in [docs/wazuh.md](docs/wazuh.md).
 
 Run `pwsh ./scripts/validate.ps1` before pushing. Argo CD tracks `main`, prunes removed resources, and self-heals drift. Renovate opens dependency pull requests, but does not merge them.
 

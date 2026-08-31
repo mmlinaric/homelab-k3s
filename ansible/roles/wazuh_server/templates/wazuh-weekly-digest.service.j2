@@ -1,0 +1,14 @@
+[Unit]
+Description=Send the weekly Wazuh homelab security digest
+After=network-online.target wazuh-indexer.service wazuh-manager.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/wazuh-weekly-digest --send
+User=root
+Group=root
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict

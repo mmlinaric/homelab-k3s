@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule the weekly Wazuh homelab security digest
+
+[Timer]
+OnCalendar=Sun *-*-* 09:00:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=wazuh-weekly-digest.service
+
+[Install]
+WantedBy=timers.target

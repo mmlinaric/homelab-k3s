@@ -1,0 +1,4 @@
+---
+wazuh_version: 4.14.7
+wazuh_server_address: 192.168.60.20
+wazuh_repository_key_sha256: a378ca8dfa6b72122df288f64a0cde54f1cbfa3db9b43e6865cb73def35b5b17
