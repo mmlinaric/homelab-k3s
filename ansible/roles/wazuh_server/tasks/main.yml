@@ -696,7 +696,9 @@
         version: 1
         kibanaSavedObjectMeta:
           searchSourceJSON: >-
-            {"query":{"query":"decoder.name: routeros","language":"kuery"},"filter":[],"highlightAll":true,"version":true,"indexRefName":"kibanaSavedObjectMeta.searchSourceJSON.index"}
+            {"query":{"query":"decoder.name: routeros","language":"kuery"},
+            "filter":[],"highlightAll":true,"version":true,
+            "indexRefName":"kibanaSavedObjectMeta.searchSourceJSON.index"}
       references:
         - name: kibanaSavedObjectMeta.searchSourceJSON.index
           type: index-pattern
@@ -771,7 +773,9 @@
         version: 1
         kibanaSavedObjectMeta:
           searchSourceJSON: >-
-            {"query":{"query":"rule.groups: kubernetes_audit","language":"kuery"},"filter":[],"highlightAll":true,"version":true,"indexRefName":"kibanaSavedObjectMeta.searchSourceJSON.index"}
+            {"query":{"query":"rule.groups: kubernetes_audit","language":"kuery"},
+            "filter":[],"highlightAll":true,"version":true,
+            "indexRefName":"kibanaSavedObjectMeta.searchSourceJSON.index"}
       references:
         - name: kibanaSavedObjectMeta.searchSourceJSON.index
           type: index-pattern
