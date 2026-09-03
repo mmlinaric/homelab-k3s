@@ -1,0 +1,41 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: oxisource-public
+  namespace: oxisource-public
+spec:
+  secretName: oxisource-public-tls
+  dnsNames: [oxisource.com]
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: oxisource-lan
+  namespace: oxisource-public
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: Host(`oxisource.com`)
+      kind: Rule
+      services:
+        - {name: oxisource-public, port: 8080}
+  tls:
+    secretName: oxisource-public-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: oxisource-public
+  namespace: oxisource-public
+spec:
+  entryPoints: [tunnel]
+  routes:
+    - match: Host(`oxisource.com`)
+      kind: Rule
+      services:
+        - {name: oxisource-public, port: 8080}
+  tls:
+    secretName: oxisource-public-tls

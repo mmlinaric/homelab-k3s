@@ -26,4 +26,8 @@ ingress:
     service: https://traefik-tunnel.traefik.svc.cluster.local:8443
     originRequest:
       originServerName: mmlinaric.com
+  - hostname: oxisource.com
+    service: https://traefik-tunnel.traefik.svc.cluster.local:8443
+    originRequest:
+      originServerName: oxisource.com
   - service: http_status:404

@@ -22,6 +22,8 @@ spec:
               url: https://git.mmlinaric.com/api/healthz
             - name: portfolio
               url: https://mmlinaric.com/
+            - name: oxisource
+              url: https://oxisource.com/
             - name: jenkins
               url: https://jenkins.mmlinaric.com/login
         config:
