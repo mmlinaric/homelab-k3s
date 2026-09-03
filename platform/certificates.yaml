@@ -35,6 +35,7 @@ spec:
         selector:
           dnsZones:
             - mmlinaric.com
+            - oxisource.com
 ---
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -55,3 +56,4 @@ spec:
         selector:
           dnsZones:
             - mmlinaric.com
+            - oxisource.com

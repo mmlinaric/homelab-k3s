@@ -6,5 +6,6 @@ resources:
   - forgejo
   - cloudflared
   - portfolio
+  - oxisource-public
   - dependency-track
   - jenkins
