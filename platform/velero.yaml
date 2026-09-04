@@ -178,10 +178,14 @@ metadata:
   name: keycloak-daily
   namespace: velero
 spec:
-  schedule: "0 2 * * *"
+  schedule: "30 2 * * *"
   template:
     includedNamespaces:
       - keycloak
+    includedResources:
+      - deployments
+      - pods
+      - persistentvolumeclaims
     excludedResources:
       - secrets
     labelSelector:
@@ -429,6 +433,10 @@ spec:
   template:
     includedNamespaces:
       - keycloak
+    includedResources:
+      - deployments
+      - pods
+      - persistentvolumeclaims
     excludedResources:
       - secrets
     labelSelector:
@@ -466,6 +474,10 @@ spec:
   template:
     includedNamespaces:
       - keycloak
+    includedResources:
+      - deployments
+      - pods
+      - persistentvolumeclaims
     excludedResources:
       - secrets
     labelSelector:

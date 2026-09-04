@@ -166,9 +166,7 @@ spec:
             action: Check the latest thinBackup set, Jenkins quiet-mode backup logs, and the jenkins-daily Velero backup.
         - alert: VeleroBackupPartiallyFailed
           expr: >-
-            (increase(velero_backup_partial_failure_total{schedule=~"(gitlab|forgejo|keycloak|dependency-track|jenkins)-(daily|weekly|monthly)"}[8h]) > 0)
-            unless on(schedule)
-            (velero_backup_last_status{schedule=~"(gitlab|keycloak|dependency-track|jenkins)-(daily|weekly|monthly)"} == 1)
+            velero_backup_items_errors{schedule=~"(gitlab|forgejo|keycloak|dependency-track|jenkins)-(daily|weekly|monthly)"} > 0
           for: 15m
           labels: {severity: warning}
           annotations:

@@ -40,13 +40,13 @@ The schedules use a four-hour item-operation timeout and a two-hour GitLab hook 
 
 ## Keycloak consistency boundaries
 
-Velero executes `/scripts/backup.sh` in the `keycloak-logical-backup` pod before snapshotting the 20 GiB `keycloak-backups` PVC. The script writes a PostgreSQL custom-format archive to a temporary filename, validates it with `pg_restore --list`, atomically renames it, writes a SHA-256 checksum, and removes staging files older than three days. A failed dump or validation fails the Velero backup before any snapshot is accepted.
+Velero executes `/scripts/backup.sh` in the `keycloak-logical-backup` pod before snapshotting the 20 GiB `keycloak-backups` PVC. The script retries the dump for up to ten minutes while the database recovers from a transient restart, writes a PostgreSQL custom-format archive to a temporary filename, validates it with `pg_restore --list`, atomically renames it, writes a SHA-256 checksum, and removes staging files older than three days. A failed dump or validation fails the Velero backup before any snapshot is accepted.
 
 The live CNPG PVC is not selected by these schedules. Only the backup helper and staging PVC carry `backup.homelab/strategy: velero`.
 
 | Schedule | Cron | TTL |
 | --- | --- | --- |
-| `keycloak-daily` | 02:00 every day | 336h |
+| `keycloak-daily` | 02:30 every day | 336h |
 | `keycloak-weekly` | 04:00 Sunday | 1344h |
 | `keycloak-monthly` | 06:00 on day 1 | 8784h |
 

@@ -34,12 +34,23 @@ data:
     }
     trap cleanup EXIT HUP INT TERM
 
-    pg_dump \
-      --format=custom \
-      --compress=gzip:6 \
-      --no-owner \
-      --no-acl \
-      --file="${temporary}"
+    attempt=1
+    max_attempts=20
+    until pg_dump \
+        --format=custom \
+        --compress=gzip:6 \
+        --no-owner \
+        --no-acl \
+        --file="${temporary}"; do
+      rm -f "${temporary}"
+      if [ "${attempt}" -ge "${max_attempts}" ]; then
+        echo "Database dump failed after ${max_attempts} attempts." >&2
+        exit 1
+      fi
+      echo "Database is unavailable; retrying dump in 30 seconds." >&2
+      attempt="$((attempt + 1))"
+      sleep 30
+    done
     pg_restore --list "${temporary}" >/dev/null
     mv "${temporary}" "${archive}"
     (
