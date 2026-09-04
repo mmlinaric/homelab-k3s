@@ -17,6 +17,8 @@ spec:
         app.kubernetes.io/name: oxisource-public
     spec:
       automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-pull
       securityContext:
         runAsNonRoot: true
         seccompProfile: {type: RuntimeDefault}
