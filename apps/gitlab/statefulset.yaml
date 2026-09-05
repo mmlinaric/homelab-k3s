@@ -106,8 +106,27 @@ spec:
                 prometheus_monitoring['enable'] = false
                 gitlab_pages['enable'] = false
                 gitlab_kas['enable'] = false
-                puma['worker_processes'] = 2
+                puma['worker_processes'] = 0
                 sidekiq['concurrency'] = 10
+                gitlab_rails['env'] = {
+                  'MALLOC_CONF' => 'dirty_decay_ms:1000,muzzy_decay_ms:1000'
+                }
+                gitaly['configuration'] = {
+                  concurrency: [
+                    {
+                      'rpc' => '/gitaly.SmartHTTPService/PostReceivePack',
+                      'max_per_repo' => 3
+                    },
+                    {
+                      'rpc' => '/gitaly.SSHService/SSHUploadPack',
+                      'max_per_repo' => 3
+                    }
+                  ]
+                }
+                gitaly['env'] = {
+                  'MALLOC_CONF' => 'dirty_decay_ms:1000,muzzy_decay_ms:1000',
+                  'GITALY_COMMAND_SPAWN_MAX_PARALLEL' => '2'
+                }
                 postgresql['shared_buffers'] = '256MB'
                 gitlab_rails['backup_keep_time'] = 172800
           ports:
