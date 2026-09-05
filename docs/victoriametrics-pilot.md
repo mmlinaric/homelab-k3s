@@ -1,35 +1,38 @@
 # VictoriaMetrics operations
 
-VictoriaMetrics is the cluster's authoritative metrics store, scraper, and rule
-evaluator. The application name retains the `victoria-metrics-pilot` suffix to
-avoid recreating its PVC and operator-managed resources during the cutover.
+The `victoria-metrics-pilot` application is the cluster's complete metrics
+stack. The name is retained to avoid recreating its PVC and operator-managed
+resources after the migration.
 
-The active pipeline consists of VictoriaMetrics Operator, `vmagent`, `vmalert`,
-and a single-node `vmsingle`. Existing `ServiceMonitor`, `PodMonitor`, and
-`PrometheusRule` objects are converted by the VictoriaMetrics Operator. The
-kube-prometheus-stack application remains installed for Grafana, Alertmanager,
-kube-state-metrics, node exporter, Prometheus CRDs, and their operator; its
-Prometheus server is disabled.
+It deploys VictoriaMetrics Operator, `vmagent`, `vmalert`, VMSingle, Grafana,
+VMAlertmanager, kube-state-metrics, node-exporter, Kubernetes scrape objects,
+rules, and dashboards. There is no Prometheus server and no Prometheus
+Operator process.
 
-Grafana provisions VMSingle as its default Prometheus-compatible datasource
-using UID `prometheus`. Preserving that UID keeps existing dashboards working.
-`vmalert` evaluates converted application and Kubernetes rules plus native
-VictoriaMetrics health rules, then sends alerts to the existing Alertmanager and
-Telegram routing.
+The separate `prometheus-operator-crds` application installs CRDs only. This
+lets third-party charts continue to create `ServiceMonitor`, `PodMonitor`,
+`Probe`, and `PrometheusRule` objects. VictoriaMetrics Operator converts those
+objects into VM-native equivalents; the CRD chart runs no pods.
+
+Grafana uses VMSingle's Prometheus-compatible API through datasource UID
+`prometheus`. `vmalert` evaluates both converted application rules and native
+VictoriaMetrics/Kubernetes rules, then sends alerts to VMAlertmanager and its
+Telegram receivers.
 
 ## Verify the pipeline
 
 ```bash
 kubectl -n argocd get applications \
-  kube-prometheus-stack victoria-metrics-pilot
-kubectl -n monitoring get vmsingle,vmagent,vmalert
+  victoria-metrics-pilot prometheus-operator-crds
+kubectl -n monitoring get \
+  vmsingle,vmagent,vmalert,vmalertmanager
 kubectl -n monitoring get pods,pvc
-kubectl -n monitoring get prometheus
+kubectl -n monitoring get prometheus,alertmanager
 ```
 
-The applications and VictoriaMetrics resources must be healthy. The final
-command should report no Prometheus resources. The old Prometheus PVC is retained
-temporarily for rollback but has no running pod attached to it.
+Both applications and all VictoriaMetrics resources must be healthy. The last
+command should report no resources because Prometheus and Prometheus-Operator
+Alertmanager CRs are not used.
 
 Inspect scrape targets and evaluated rules:
 
@@ -45,9 +48,10 @@ curl -fsS http://127.0.0.1:18080/api/v1/rules | jq \
   '{groups: (.data.groups | length), unhealthy: [.data.groups[].rules[] | select(.health != "ok")]}'
 ```
 
-All active targets and rules must be healthy. Native groups named `vm-health`,
-`vmagent`, `vmalert`, `vmoperator`, and `vmsingle` monitor the replacement
-pipeline itself.
+All active targets and rules must be healthy. Expected infrastructure jobs
+include `apiserver`, `core-dns`, `kube-proxy`, `kubelet`, `kube-state-metrics`,
+and `node-exporter`. Native rule groups monitor VMSingle, vmagent, vmalert,
+VMAlertmanager, and VictoriaMetrics Operator.
 
 Representative smoke-test queries:
 
@@ -74,24 +78,18 @@ kubectl -n monitoring get pods \
 
 Watch `vmagent_remotewrite_packets_dropped_total`,
 `vmagent_remotewrite_pending_data_bytes`, `vm_rows_inserted_total`,
-`vm_slow_row_inserts_total`, rule evaluation failures, pod restarts, and VMSingle
-PVC growth. The configured retention is seven days with a 10 GiB Longhorn PVC
-and 1 GB free-space reserve.
+`vm_slow_row_inserts_total`, rule evaluation failures, notification failures,
+pod restarts, and VMSingle PVC growth. Metrics retention is seven days on a
+10 GiB Longhorn PVC with a 1 GB free-space reserve.
 
 ## Rollback
 
-The old Prometheus PVC is retained so the server can be restored without losing
-its existing local history. To roll back, revert the cutover commits so that:
+Revert the consolidation commits or restore the previous
+`kube-prometheus-stack` Application from Git history. Disable the VM-native
+exporters, Kubernetes scrapes, rules, Grafana, and VMAlertmanager before
+re-enabling their kube-prometheus-stack counterparts to avoid port conflicts,
+duplicate samples, and duplicate notifications.
 
-1. `vmalert` returns to `notifier.blackhole: "true"`.
-2. kube-prometheus-stack sets `prometheus.enabled: true` and re-enables its
-   Prometheus rule group.
-3. Grafana's generated Prometheus datasource is restored as the default.
-
-Wait for Prometheus to become ready and confirm its targets before restoring its
-alert notifications. Do not run both rule evaluators against Alertmanager unless
-duplicate notifications are acceptable.
-
-After the rollback window expires, the unused PVC named
-`prometheus-kube-prometheus-stack-prometheus-db-prometheus-kube-prometheus-stack-prometheus-0`
-may be deleted manually. PVC deletion is intentionally not automated.
+The former Prometheus and Alertmanager StatefulSet PVCs may remain available
+for a limited rollback window. Confirm their names with `kubectl get pvc -n
+monitoring`; PVC deletion is intentionally manual.

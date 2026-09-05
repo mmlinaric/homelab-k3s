@@ -30,7 +30,7 @@ Use Grafana and Telegram alerts for normal monitoring. Investigate any failed or
 
 VictoriaMetrics is the authoritative metrics store, scraper, and rule evaluator.
 Grafana uses its Prometheus-compatible API under datasource UID `prometheus`, and
-`vmalert` sends notifications to the existing Alertmanager. Follow [the
+`vmalert` sends notifications to the stack's VMAlertmanager. Follow [the
 VictoriaMetrics operations runbook](victoriametrics-pilot.md) for health checks
 and rollback instructions.
 
@@ -75,7 +75,7 @@ curl -fsS http://127.0.0.1:3100/ready
 
 Retention is enforced by Loki's compactor. Increase both `loki.limits_config.retention_period` and the `singleBinary.persistence.size` value together if seven days consistently approaches the volume capacity.
 
-Logging alerts use two paths. Prometheus evaluates Loki, Alloy, canary, and storage health rules. Loki's ruler evaluates LogQL rules for GitLab, Forgejo, and Keycloak error bursts and fatal signatures. Both paths send firing alerts to the existing Alertmanager and Telegram receiver. Keep generic error thresholds conservative; add application-specific signatures only after confirming the exact production log format in Logs Drilldown.
+Logging alerts use two paths. `vmalert` evaluates Loki, Alloy, canary, and storage health rules. Loki's ruler evaluates LogQL rules for GitLab, Forgejo, and Keycloak error bursts and fatal signatures. Both paths send firing alerts to VMAlertmanager and its Telegram receiver. Keep generic error thresholds conservative; add application-specific signatures only after confirming the exact production log format in Logs Drilldown.
 
 Longhorn access requires both a client address in the trusted network `192.168.30.0/24` or VPN network `192.168.90.0/24` and the Keycloak client role `longhorn:admin`. Verify the controls after authentication or network changes:
 
