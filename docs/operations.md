@@ -31,7 +31,7 @@ Use Grafana and Telegram alerts for normal monitoring. Investigate any failed or
 VictoriaMetrics is the authoritative metrics store, scraper, and rule evaluator.
 Grafana uses its Prometheus-compatible API under datasource UID `prometheus`, and
 `vmalert` sends notifications to the stack's VMAlertmanager. Follow [the
-VictoriaMetrics operations runbook](victoriametrics-pilot.md) for health checks
+VictoriaMetrics operations runbook](victoriametrics-stack.md) for health checks
 and rollback instructions.
 
 Useful commands:

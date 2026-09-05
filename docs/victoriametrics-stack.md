@@ -1,8 +1,7 @@
 # VictoriaMetrics operations
 
-The `victoria-metrics-pilot` application is the cluster's complete metrics
-stack. The name is retained to avoid recreating its PVC and operator-managed
-resources after the migration.
+The `victoria-metrics-stack` application is the cluster's complete metrics
+stack.
 
 It deploys VictoriaMetrics Operator, `vmagent`, `vmalert`, VMSingle, Grafana,
 VMAlertmanager, kube-state-metrics, node-exporter, Kubernetes scrape objects,
@@ -23,7 +22,7 @@ Telegram receivers.
 
 ```bash
 kubectl -n argocd get applications \
-  victoria-metrics-pilot prometheus-operator-crds
+  victoria-metrics-stack prometheus-operator-crds
 kubectl -n monitoring get \
   vmsingle,vmagent,vmalert,vmalertmanager
 kubectl -n monitoring get pods,pvc
@@ -38,9 +37,9 @@ Inspect scrape targets and evaluated rules:
 
 ```bash
 kubectl -n monitoring port-forward \
-  service/vmagent-victoria-metrics-pilot-victoria-metrics-k8s-stack 18429:8429
+  service/vmagent-victoria-metrics-stack-victoria-metrics-k8s-stack 18429:8429
 kubectl -n monitoring port-forward \
-  service/vmalert-victoria-metrics-pilot-victoria-metrics-k8s-stack 18080:8080
+  service/vmalert-victoria-metrics-stack-victoria-metrics-k8s-stack 18080:8080
 
 curl -fsS http://127.0.0.1:18429/api/v1/targets | jq \
   '{total: (.data.activeTargets | length), down: [.data.activeTargets[] | select(.health != "up")]}'
@@ -90,6 +89,6 @@ exporters, Kubernetes scrapes, rules, Grafana, and VMAlertmanager before
 re-enabling their kube-prometheus-stack counterparts to avoid port conflicts,
 duplicate samples, and duplicate notifications.
 
-The former Prometheus and Alertmanager StatefulSet PVCs may remain available
-for a limited rollback window. Confirm their names with `kubectl get pvc -n
-monitoring`; PVC deletion is intentionally manual.
+The retired Prometheus, Alertmanager, and legacy VictoriaMetrics PVCs were
+deleted after the clean stack passed its acceptance checks. Restore historical
+metrics from an external backup if needed; rollback creates fresh storage.
