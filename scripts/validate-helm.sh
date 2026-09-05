@@ -45,7 +45,6 @@ yq '.spec.source.helm.valuesObject' clusters/homelab/applications/prometheus-ope
       --namespace monitoring \
       --include-crds \
       --values - > /dev/null
-render_application monitoring prometheus-community/kube-prometheus-stack 88.6.2 monitoring clusters/homelab/applications/kube-prometheus-stack.yaml
 render_application victoria-metrics-pilot vm/victoria-metrics-k8s-stack 0.91.2 monitoring clusters/homelab/applications/victoria-metrics-pilot.yaml
 render_application blackbox prometheus-community/prometheus-blackbox-exporter 11.17.2 monitoring clusters/homelab/applications/blackbox-exporter.yaml
 render_application loki grafana-community/loki 18.7.6 monitoring clusters/homelab/applications/loki.yaml

@@ -16,8 +16,8 @@ spec:
       valuesObject:
         crds:
           annotations:
-            # CRs must survive the later kube-prometheus-stack prune while
-            # ownership transfers to this dedicated CRD-only application.
+            # Avoid cascading deletion of third-party monitoring resources if
+            # this compatibility chart is removed accidentally.
             argocd.argoproj.io/sync-options: Prune=false
   destination:
     server: https://kubernetes.default.svc
