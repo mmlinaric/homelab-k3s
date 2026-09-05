@@ -84,7 +84,7 @@ spec:
     - match: Host(`grafana.mmlinaric.com`)
       kind: Rule
       services:
-        - name: kube-prometheus-stack-grafana
+        - name: victoria-metrics-pilot-grafana
           port: 80
   tls:
     secretName: grafana-tls
@@ -95,7 +95,7 @@ metadata:
   name: homelab
   namespace: monitoring
   labels:
-    release: kube-prometheus-stack
+    release: victoria-metrics-pilot
 spec:
   groups:
     - name: homelab.endpoints

@@ -12,7 +12,6 @@ resources:
   - velero.yaml
   - argocd.yaml
   - monitoring.yaml
-  - kube-proxy-endpoint.yaml
   - backup-dashboard.yaml
   - dependency-track-dashboard.yaml
   - headlamp.yaml

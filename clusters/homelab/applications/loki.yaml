@@ -38,7 +38,7 @@ spec:
             retention_enabled: true
             delete_request_store: filesystem
           rulerConfig:
-            alertmanager_url: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093
+            alertmanager_url: http://vmalertmanager-vm-alertmanager.monitoring.svc.cluster.local:9093
             enable_alertmanager_v2: true
             external_url: https://grafana.mmlinaric.com
             datasource_uid: loki
@@ -90,13 +90,13 @@ spec:
           rules:
             enabled: true
             labels:
-              release: kube-prometheus-stack
+              release: victoria-metrics-pilot
           alerts:
             enabled: true
             disabled:
               LokiCompactorHasNotSuccessfullyRunCompaction: true
             labels:
-              release: kube-prometheus-stack
+              release: victoria-metrics-pilot
         serviceAccount:
           automountServiceAccountToken: false
         extraObjects:

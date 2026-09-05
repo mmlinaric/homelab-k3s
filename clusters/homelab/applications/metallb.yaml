@@ -14,7 +14,7 @@ spec:
     helm:
       valuesObject:
         prometheus:
-          serviceAccount: kube-prometheus-stack-prometheus
+          serviceAccount: vmagent-victoria-metrics-pilot-victoria-metrics-k8s-stack
           namespace: monitoring
           serviceMonitor:
             enabled: true

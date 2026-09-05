@@ -95,11 +95,11 @@ spec:
           serviceMonitor:
             enabled: true
             additionalLabels:
-              release: kube-prometheus-stack
+              release: victoria-metrics-pilot
           nodeAgentPodMonitor:
             enabled: true
             additionalLabels:
-              release: kube-prometheus-stack
+              release: victoria-metrics-pilot
         configMaps:
           backup-repository-config:
             data:

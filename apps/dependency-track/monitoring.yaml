@@ -4,7 +4,7 @@ metadata:
   name: dependency-track
   namespace: dependency-track
   labels:
-    release: kube-prometheus-stack
+    release: victoria-metrics-pilot
 spec:
   selector:
     matchLabels:
@@ -22,7 +22,7 @@ metadata:
   name: dependency-track
   namespace: dependency-track
   labels:
-    release: kube-prometheus-stack
+    release: victoria-metrics-pilot
 spec:
   groups:
     - name: dependency-track.vulnerability-sources

@@ -4,7 +4,7 @@ metadata:
   name: jenkins
   namespace: jenkins
   labels:
-    release: kube-prometheus-stack
+    release: victoria-metrics-pilot
 spec:
   groups:
     - name: homelab.jenkins
