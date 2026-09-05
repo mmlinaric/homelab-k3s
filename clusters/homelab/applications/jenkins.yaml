@@ -280,7 +280,7 @@ spec:
           prometheus:
             enabled: true
             serviceMonitorAdditionalLabels:
-              release: victoria-metrics-pilot
+              release: victoria-metrics-stack
             scrapeInterval: 60s
             scrapeEndpoint: /prometheus/
           testEnabled: false

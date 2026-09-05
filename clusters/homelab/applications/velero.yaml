@@ -95,11 +95,11 @@ spec:
           serviceMonitor:
             enabled: true
             additionalLabels:
-              release: victoria-metrics-pilot
+              release: victoria-metrics-stack
           nodeAgentPodMonitor:
             enabled: true
             additionalLabels:
-              release: victoria-metrics-pilot
+              release: victoria-metrics-stack
         configMaps:
           backup-repository-config:
             data:

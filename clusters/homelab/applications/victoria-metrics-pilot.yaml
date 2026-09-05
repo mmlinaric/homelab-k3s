@@ -15,6 +15,8 @@ spec:
       valuesObject:
         argocdReleaseOverride: victoria-metrics-pilot
 
+        # Transitional operator-only release. It finalizes the old CRs and
+        # reconciles the clean-name release until operator ownership moves.
         victoria-metrics-operator:
           admissionWebhooks:
             certManager:
@@ -27,299 +29,24 @@ spec:
             requests: {cpu: 50m, memory: 96Mi}
             limits: {cpu: 300m, memory: 256Mi}
 
-        vmsingle:
-          enabled: true
-          spec:
-            retentionPeriod: 7d
-            extraArgs:
-              storage.minFreeDiskSpaceBytes: 1GB
-            storage:
-              storageClassName: longhorn
-              accessModes: [ReadWriteOnce]
-              resources:
-                requests: {storage: 10Gi}
-            resources:
-              requests: {cpu: 150m, memory: 500Mi}
-              limits: {cpu: 1200m, memory: 1500Mi}
-
-        vmagent:
-          enabled: true
-          rbac:
-            namespaced: false
-          spec:
-            selectAllByDefault: true
-            scrapeInterval: 60s
-            scrapeTimeout: 10s
-            resources:
-              requests: {cpu: 50m, memory: 200Mi}
-              limits: {cpu: 200m, memory: 500Mi}
-
-        vmalert:
-          enabled: true
-          spec:
-            selectAllByDefault: true
-            evaluationInterval: 60s
-            resources:
-              requests: {cpu: 50m, memory: 200Mi}
-              limits: {cpu: 200m, memory: 500Mi}
-
-        alertmanager:
-          enabled: true
-          # The operator prefixes managed resources with "vmalertmanager-".
-          # Keep the CR name short enough for the resulting Service DNS name.
-          name: vm-alertmanager
-          templateFiles:
-            telegram.tmpl: |-
-              {{- define "telegram.homelab.message" -}}
-              {{ if eq .CommonLabels.notification_type "event" }}🟠 <b>EVENT -
-              {{- else }}
-              {{- if eq .Status "firing" }}
-              {{- if eq .CommonLabels.severity "critical" }}🔴
-              {{- else if eq .CommonLabels.severity "warning" }}🟠
-              {{- else }}ℹ️{{ end }}
-              {{- else }}🟢{{ end }} <b>{{ .Status | toUpper | html }} -
-              {{- end }}
-              {{- if .CommonAnnotations.summary }} {{ .CommonAnnotations.summary | html }}
-              {{- else }} {{ .CommonLabels.alertname | html }}{{ end }}</b>
-
-              {{ if .CommonLabels.severity }}Severity: {{ .CommonLabels.severity | toUpper | html }}{{ end }}
-              {{ range .Alerts }}{{ if or .Labels.cluster .Labels.namespace }}<b>Where:</b>
-              {{- with .Labels.cluster }} {{ . | html }}{{ end }}
-              {{- if and .Labels.cluster .Labels.namespace }} / {{ end }}
-              {{- with .Labels.namespace }}{{ . | html }}{{ end }}
-              {{- end }}{{ if or .Labels.pod .Labels.container }}
-              <b>Workload:</b>{{ with .Labels.pod }} {{ . | html }}{{ end }}
-              {{- if and .Labels.pod .Labels.container }} / {{ end }}
-              {{- with .Labels.container }}{{ . | html }}{{ end }}{{ end }}
-
-              <b>What:</b>
-              {{ if eq .Status "firing" }}
-              {{- if .Annotations.description }}{{ .Annotations.description | html }}
-              {{- else }}The alert condition is active.{{ end }}
-              {{- else }}
-              {{- if .Annotations.resolved_description }}{{ .Annotations.resolved_description | html }}
-              {{- else }}The alert condition is no longer active.{{ end }}
-              {{- end }}{{ if and (eq .Status "firing") .Annotations.impact }}
-
-              <b>Possible impact:</b>
-              {{ .Annotations.impact | html }}{{ end }}{{ if and (eq .Status "firing") .Annotations.action }}
-
-              <b>Next step:</b>
-              {{ .Annotations.action | html }}{{ end }}
-              {{- if or .Annotations.logs_query .GeneratorURL .Annotations.runbook_url }}
-
-              {{ if .Annotations.logs_query }}
-              {{- $pane := printf `{"alert":{"datasource":"loki","queries":[{"refId":"A","expr":%q,` .Annotations.logs_query }}
-              {{- $pane = printf `%s"queryType":"range","datasource":{"type":"loki","uid":"loki"}}],` $pane }}
-              {{- $pane = printf `%s"range":{"from":"now-1h","to":"now"}}}` $pane }}
-              🔎 <a href="https://grafana.mmlinaric.com/explore?panes={{ $pane | urlquery }}&amp;schemaVersion=1&amp;orgId=1">Open affected logs</a>
-              {{- else if .GeneratorURL }}🔎 <a href="{{ .GeneratorURL | html }}">Open alert source</a>{{ end }}
-              {{- if .Annotations.runbook_url }}
-              📖 <a href="{{ .Annotations.runbook_url | html }}">Open runbook</a>{{ end }}{{ end }}
-              {{ end }}
-              {{- end -}}
-          config:
-            global:
-              resolve_timeout: 5m
-            route:
-              group_by: [namespace, alertname, task]
-              group_wait: 30s
-              group_interval: 5m
-              repeat_interval: 6h
-              receiver: telegram
-              routes:
-                - receiver: "null"
-                  matchers:
-                    - alertname =~ "Watchdog|InfoInhibitor"
-                - receiver: telegram-events
-                  matchers:
-                    - notification_type = "event"
-            receivers:
-              - name: telegram
-                telegram_configs:
-                  - bot_token_file: /etc/vm/secrets/alertmanager-telegram/bot-token
-                    chat_id_file: /etc/vm/secrets/alertmanager-telegram/chat-id
-                    send_resolved: true
-                    parse_mode: HTML
-                    message: '{{ template "telegram.homelab.message" . }}'
-              - name: telegram-events
-                telegram_configs:
-                  - bot_token_file: /etc/vm/secrets/alertmanager-telegram/bot-token
-                    chat_id_file: /etc/vm/secrets/alertmanager-telegram/chat-id
-                    send_resolved: false
-                    parse_mode: HTML
-                    message: '{{ template "telegram.homelab.message" . }}'
-              - name: "null"
-          spec:
-            retention: 120h
-            secrets: [alertmanager-telegram]
-            storage:
-              volumeClaimTemplate:
-                spec:
-                  storageClassName: longhorn
-                  accessModes: [ReadWriteOnce]
-                  resources:
-                    requests: {storage: 2Gi}
-            resources:
-              requests: {cpu: 50m, memory: 128Mi}
-              limits: {cpu: 300m, memory: 384Mi}
-        grafana:
-          enabled: true
-          envFromSecret: grafana-oidc
-          grafana.ini:
-            server:
-              root_url: https://grafana.mmlinaric.com
-            auth.generic_oauth:
-              enabled: true
-              name: Keycloak
-              allow_sign_up: true
-              client_id: grafana
-              scopes: openid profile email
-              auth_url: https://auth.mmlinaric.com/realms/homelab/protocol/openid-connect/auth
-              token_url: https://auth.mmlinaric.com/realms/homelab/protocol/openid-connect/token
-              api_url: https://auth.mmlinaric.com/realms/homelab/protocol/openid-connect/userinfo
-              role_attribute_path: contains(resource_access.grafana.roles[*], 'admin') && 'Admin' || 'Viewer'
-              allow_assign_grafana_admin: true
-          admin:
-            existingSecret: grafana-admin
-            userKey: admin-user
-            passwordKey: admin-password
-          persistence:
-            enabled: true
-            storageClassName: longhorn
-            size: 5Gi
-          resources:
-            requests: {cpu: 200m, memory: 256Mi}
-            limits: {cpu: 1, memory: 768Mi}
-        defaultDatasources:
-          victoriametrics:
-            datasources:
-              - name: Prometheus
-                type: prometheus
-                access: proxy
-                uid: prometheus
-                isDefault: true
-                editable: false
-                jsonData:
-                  prometheusType: Prometheus
-                  prometheusVersion: 2.24.0
-                  timeInterval: 60s
-                  timeout: 60
-          alertmanager:
-            datasources:
-              - name: Alertmanager
-                uid: alertmanager
-                type: alertmanager
-                access: proxy
-                isDefault: false
-                editable: false
-                jsonData:
-                  handleGrafanaManagedAlerts: false
-                  implementation: prometheus
-          extra:
-            - name: Loki
-              uid: loki
-              type: loki
-              access: proxy
-              url: http://loki.monitoring.svc.cluster.local:3100
-              isDefault: false
-              editable: false
-              jsonData:
-                maxLines: 1000
-                timeout: 60
-        prometheus-node-exporter:
-          enabled: true
-          resources:
-            requests: {cpu: 20m, memory: 32Mi}
-            limits: {cpu: 100m, memory: 128Mi}
-        kube-state-metrics:
-          enabled: true
-          resources:
-            requests: {cpu: 30m, memory: 80Mi}
-            limits: {cpu: 200m, memory: 256Mi}
-          rbac:
-            extraRules:
-              - apiGroups: [k3s.cattle.io]
-                resources: [etcdsnapshotfiles]
-                verbs: [list, watch]
-          customResourceState:
-            enabled: true
-            config:
-              kind: CustomResourceStateMetrics
-              spec:
-                resources:
-                  - groupVersionKind:
-                      group: k3s.cattle.io
-                      version: v1
-                      kind: ETCDSnapshotFile
-                    metricNamePrefix: k3s
-                    labelsFromPath:
-                      name: [metadata, name]
-                      location: [spec, location]
-                    metrics:
-                      - name: etcd_snapshot_created_timestamp
-                        help: Unix timestamp when the K3s etcd snapshot was created.
-                        each:
-                          type: Gauge
-                          gauge:
-                            path: [status, creationTime]
-                      - name: etcd_snapshot_ready
-                        help: Whether the K3s etcd snapshot is ready for restore.
-                        each:
-                          type: Gauge
-                          gauge:
-                            path: [status, readyToUse]
-                      - name: etcd_snapshot_size_bytes
-                        help: Size of the K3s etcd snapshot in bytes.
-                        each:
-                          type: Gauge
-                          gauge:
-                            path: [status, size]
-
-        kubelet:
-          enabled: true
-        kubeApiServer:
-          enabled: true
-        kubeControllerManager:
-          enabled: false
-        kubeDns:
-          enabled: false
-        coreDns:
-          enabled: true
-        kubeEtcd:
-          enabled: false
-        kubeScheduler:
-          enabled: false
-        kubeProxy:
-          enabled: true
-          endpoints: [192.168.60.10]
-          vmScrape:
-            spec:
-              discoveryRole: endpointslices
-              jobLabel: app.kubernetes.io/component
-              namespaceSelector:
-                matchNames: [kube-system]
-              endpoints:
-                - bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
-                  port: http-metrics
-                  metricRelabelConfigs:
-                    - action: drop
-                      sourceLabels: [__name__]
-                      regex: "^(apiserver|etcd)_.*"
-
-        defaultDashboards:
-          enabled: true
-        defaultRules:
-          enabled: true
-          groups:
-            kube-scheduler.rules:
-              enabled: false
-            kubernetes-system-controller-manager:
-              enabled: false
-            kubernetes-system-scheduler:
-              enabled: false
-        syncJob:
-          enabled: true
+        vmsingle: {enabled: false}
+        vmagent: {enabled: false}
+        vmalert: {enabled: false}
+        alertmanager: {enabled: false}
+        grafana: {enabled: false, forceDeployDatasource: false}
+        prometheus-node-exporter: {enabled: false}
+        kube-state-metrics: {enabled: false}
+        kubelet: {enabled: false}
+        kubeApiServer: {enabled: false}
+        kubeControllerManager: {enabled: false}
+        kubeDns: {enabled: false}
+        coreDns: {enabled: false}
+        kubeEtcd: {enabled: false}
+        kubeScheduler: {enabled: false}
+        kubeProxy: {enabled: false}
+        defaultDashboards: {enabled: false}
+        defaultRules: {enabled: false}
+        syncJob: {enabled: false}
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
