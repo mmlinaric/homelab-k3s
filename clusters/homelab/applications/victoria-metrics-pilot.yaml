@@ -59,14 +59,14 @@ spec:
           spec:
             selectAllByDefault: true
             evaluationInterval: 60s
-            extraArgs:
-              notifier.blackhole: "true"
+            notifier:
+              url: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093
             resources:
               requests: {cpu: 50m, memory: 200Mi}
               limits: {cpu: 200m, memory: 500Mi}
 
-        # The pilot evaluates converted rules but deliberately has no notifier.
-        # Prometheus remains the only source of Alertmanager/Telegram alerts.
+        # Keep the existing Alertmanager to preserve its Telegram routing,
+        # templates, secrets, and persisted silences during the cutover.
         alertmanager:
           enabled: false
         grafana:
