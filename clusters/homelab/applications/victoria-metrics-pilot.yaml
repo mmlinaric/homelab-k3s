@@ -137,15 +137,15 @@ spec:
             receivers:
               - name: telegram
                 telegram_configs:
-                  - bot_token_file: /etc/alertmanager/secrets/alertmanager-telegram/bot-token
-                    chat_id_file: /etc/alertmanager/secrets/alertmanager-telegram/chat-id
+                  - bot_token_file: /etc/vm/secrets/alertmanager-telegram/bot-token
+                    chat_id_file: /etc/vm/secrets/alertmanager-telegram/chat-id
                     send_resolved: true
                     parse_mode: HTML
                     message: '{{ template "telegram.homelab.message" . }}'
               - name: telegram-events
                 telegram_configs:
-                  - bot_token_file: /etc/alertmanager/secrets/alertmanager-telegram/bot-token
-                    chat_id_file: /etc/alertmanager/secrets/alertmanager-telegram/chat-id
+                  - bot_token_file: /etc/vm/secrets/alertmanager-telegram/bot-token
+                    chat_id_file: /etc/vm/secrets/alertmanager-telegram/chat-id
                     send_resolved: false
                     parse_mode: HTML
                     message: '{{ template "telegram.homelab.message" . }}'
@@ -311,6 +311,13 @@ spec:
           enabled: true
         defaultRules:
           enabled: true
+          groups:
+            kube-scheduler.rules:
+              enabled: false
+            kubernetes-system-controller-manager:
+              enabled: false
+            kubernetes-system-scheduler:
+              enabled: false
         syncJob:
           enabled: true
   destination:
