@@ -16,7 +16,13 @@ spec:
         argocdReleaseOverride: victoria-metrics-stack
 
         victoria-metrics-operator:
-          enabled: false
+          enabled: true
+          crds:
+            plain: false
+            annotations:
+              argocd.argoproj.io/sync-options: Prune=false
+            cleanup:
+              enabled: false
           admissionWebhooks:
             certManager:
               enabled: true

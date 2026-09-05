@@ -152,7 +152,7 @@
 
   <rule id="100219" level="1">
     <if_sid>100210</if_sid>
-    <field name="user.username" type="pcre2">^system:serviceaccount:monitoring:victoria-metrics-pilot-victoria-metrics-operator$</field>
+    <field name="user.username" type="pcre2">^system:serviceaccount:monitoring:victoria-metrics-stack-victoria-metrics-operator$</field>
     <field name="verb" type="pcre2">^(?:patch|update)$</field>
     <field name="objectRef.resource" type="pcre2">^services$</field>
     <field name="responseStatus.code" type="pcre2">^200$</field>
