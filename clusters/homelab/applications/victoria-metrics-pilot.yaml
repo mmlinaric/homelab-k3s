@@ -295,6 +295,7 @@ spec:
           endpoints: [192.168.60.10]
           vmScrape:
             spec:
+              discoveryRole: endpointslices
               jobLabel: app.kubernetes.io/component
               namespaceSelector:
                 matchNames: [kube-system]
