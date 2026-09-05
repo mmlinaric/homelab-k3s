@@ -14,6 +14,7 @@ resources:
   - applications/keycloak-operator.yaml
   - applications/prometheus-operator-crds.yaml
   - applications/victoria-metrics-pilot.yaml
+  - applications/victoria-metrics-stack.yaml
   - applications/loki.yaml
   - applications/alloy.yaml
   - applications/blackbox-exporter.yaml
