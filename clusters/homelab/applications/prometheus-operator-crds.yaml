@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus-operator-crds
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: prometheus-operator-crds
+    # Matches the v0.93.1 CRDs shipped by kube-prometheus-stack 88.6.2.
+    targetRevision: 31.0.1
+    helm:
+      valuesObject:
+        crds:
+          annotations:
+            # CRs must survive the later kube-prometheus-stack prune while
+            # ownership transfers to this dedicated CRD-only application.
+            argocd.argoproj.io/sync-options: Prune=false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: {enabled: true, prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
