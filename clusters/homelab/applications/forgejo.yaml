@@ -104,7 +104,7 @@ spec:
             serviceMonitor:
               enabled: true
               additionalLabels:
-                release: kube-prometheus-stack
+                release: victoria-metrics-pilot
           config:
             APP_NAME: Mlinaric Forgejo
             RUN_MODE: prod
