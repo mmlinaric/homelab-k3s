@@ -160,6 +160,7 @@ spec:
             requests: {cpu: 200m, memory: 256Mi}
             limits: {cpu: 1, memory: 768Mi}
         prometheus:
+          enabled: false
           prometheusSpec:
             retention: 7d
             retentionSize: 9GB
@@ -210,6 +211,7 @@ spec:
             kubeControllerManager: false
             kubeSchedulerAlerting: false
             kubeSchedulerRecording: false
+            prometheus: false
         kube-state-metrics:
           rbac:
             extraRules:
