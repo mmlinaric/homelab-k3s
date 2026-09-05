@@ -106,7 +106,7 @@ spec:
                 prometheus_monitoring['enable'] = false
                 gitlab_pages['enable'] = false
                 gitlab_kas['enable'] = false
-                puma['worker_processes'] = 0
+                puma['worker_processes'] = 2
                 sidekiq['concurrency'] = 10
                 gitlab_rails['env'] = {
                   'MALLOC_CONF' => 'dirty_decay_ms:1000,muzzy_decay_ms:1000'
