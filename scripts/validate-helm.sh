@@ -39,6 +39,12 @@ render_application traefik traefik/traefik 41.2.0 traefik clusters/homelab/appli
 render_application longhorn longhorn/longhorn 1.12.0 longhorn-system clusters/homelab/applications/longhorn.yaml
 render_application velero vmware-tanzu/velero 12.1.0 velero clusters/homelab/applications/velero.yaml
 render_application cloudnative-pg cnpg/cloudnative-pg 0.29.0 cnpg-system clusters/homelab/applications/cloudnative-pg.yaml
+yq '.spec.source.helm.valuesObject' clusters/homelab/applications/prometheus-operator-crds.yaml \
+  | helm template prometheus-operator-crds prometheus-community/prometheus-operator-crds \
+      --version 31.0.1 \
+      --namespace monitoring \
+      --include-crds \
+      --values - > /dev/null
 render_application monitoring prometheus-community/kube-prometheus-stack 88.6.2 monitoring clusters/homelab/applications/kube-prometheus-stack.yaml
 render_application victoria-metrics-pilot vm/victoria-metrics-k8s-stack 0.91.2 monitoring clusters/homelab/applications/victoria-metrics-pilot.yaml
 render_application blackbox prometheus-community/prometheus-blackbox-exporter 11.17.2 monitoring clusters/homelab/applications/blackbox-exporter.yaml

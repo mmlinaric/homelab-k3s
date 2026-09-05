@@ -12,6 +12,7 @@ resources:
   - applications/velero.yaml
   - applications/cloudnative-pg.yaml
   - applications/keycloak-operator.yaml
+  - applications/prometheus-operator-crds.yaml
   - applications/kube-prometheus-stack.yaml
   - applications/victoria-metrics-pilot.yaml
   - applications/loki.yaml
