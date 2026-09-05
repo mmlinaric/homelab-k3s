@@ -15,9 +15,10 @@ spec:
       valuesObject:
         argocdReleaseOverride: victoria-metrics-pilot
 
-        # Transitional operator-only release. It finalizes the old CRs and
-        # reconciles the clean-name release until operator ownership moves.
+        # Empty transitional release. CRD cleanup stays disabled while Argo
+        # prunes the old operator after the clean-name operator takes over.
         victoria-metrics-operator:
+          enabled: false
           crds:
             cleanup:
               enabled: false
@@ -54,5 +55,5 @@ spec:
     server: https://kubernetes.default.svc
     namespace: monitoring
   syncPolicy:
-    automated: {enabled: true, prune: true, selfHeal: true}
+    automated: {enabled: true, prune: true, selfHeal: true, allowEmpty: true}
     syncOptions: [CreateNamespace=true, ServerSideApply=true]
