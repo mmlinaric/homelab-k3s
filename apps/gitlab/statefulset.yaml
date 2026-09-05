@@ -143,7 +143,7 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 6
           resources:
-            requests: {cpu: 2, memory: 8Gi}
+            requests: {cpu: 2, memory: 6Gi}
             limits: {cpu: 8, memory: 12Gi}
           volumeMounts:
             - {name: config, mountPath: /etc/gitlab}
