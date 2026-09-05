@@ -65,6 +65,9 @@ spec:
 
         alertmanager:
           enabled: true
+          # The operator prefixes managed resources with "vmalertmanager-".
+          # Keep the CR name short enough for the resulting Service DNS name.
+          name: vm-alertmanager
           templateFiles:
             telegram.tmpl: |-
               {{- define "telegram.homelab.message" -}}
