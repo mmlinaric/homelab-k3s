@@ -18,6 +18,9 @@ spec:
         # Transitional operator-only release. It finalizes the old CRs and
         # reconciles the clean-name release until operator ownership moves.
         victoria-metrics-operator:
+          crds:
+            cleanup:
+              enabled: false
           admissionWebhooks:
             certManager:
               enabled: true
