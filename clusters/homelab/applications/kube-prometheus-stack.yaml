@@ -121,6 +121,18 @@ spec:
               jsonData:
                 maxLines: 1000
                 timeout: 60
+            - name: VictoriaMetrics Pilot
+              uid: victoria-metrics-pilot
+              type: prometheus
+              access: proxy
+              url: http://vmsingle-victoria-metrics-pilot-victoria-metrics-k8s-stack.monitoring.svc.cluster.local:8428
+              isDefault: false
+              editable: false
+              jsonData:
+                prometheusType: Prometheus
+                prometheusVersion: 2.24.0
+                timeInterval: 60s
+                timeout: 60
           envFromSecret: grafana-oidc
           grafana.ini:
             server:
