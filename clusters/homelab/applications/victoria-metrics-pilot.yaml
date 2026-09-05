@@ -1,0 +1,111 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: victoria-metrics-pilot
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://victoriametrics.github.io/helm-charts/
+    chart: victoria-metrics-k8s-stack
+    targetRevision: 0.91.2
+    helm:
+      valuesObject:
+        argocdReleaseOverride: victoria-metrics-pilot
+
+        victoria-metrics-operator:
+          admissionWebhooks:
+            certManager:
+              enabled: true
+          operator:
+            disable_prometheus_converter: false
+            prometheus_converter_add_argocd_ignore_annotations: true
+            enable_converter_ownership: true
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {cpu: 300m, memory: 256Mi}
+
+        vmsingle:
+          enabled: true
+          spec:
+            retentionPeriod: 7d
+            extraArgs:
+              storage.minFreeDiskSpaceBytes: 1GB
+            storage:
+              storageClassName: longhorn
+              accessModes: [ReadWriteOnce]
+              resources:
+                requests: {storage: 10Gi}
+            resources:
+              requests: {cpu: 150m, memory: 500Mi}
+              limits: {cpu: 1200m, memory: 1500Mi}
+
+        vmagent:
+          enabled: true
+          rbac:
+            namespaced: false
+          spec:
+            selectAllByDefault: true
+            scrapeInterval: 60s
+            scrapeTimeout: 10s
+            resources:
+              requests: {cpu: 50m, memory: 200Mi}
+              limits: {cpu: 200m, memory: 500Mi}
+
+        vmalert:
+          enabled: true
+          spec:
+            selectAllByDefault: true
+            evaluationInterval: 60s
+            extraArgs:
+              notifier.blackhole: "true"
+            resources:
+              requests: {cpu: 50m, memory: 200Mi}
+              limits: {cpu: 200m, memory: 500Mi}
+
+        # The pilot evaluates converted rules but deliberately has no notifier.
+        # Prometheus remains the only source of Alertmanager/Telegram alerts.
+        alertmanager:
+          enabled: false
+        grafana:
+          enabled: false
+          forceDeployDatasource: false
+        prometheus-node-exporter:
+          enabled: false
+        kube-state-metrics:
+          enabled: false
+
+        # Existing kube-prometheus-stack ServiceMonitors and PodMonitors are
+        # converted by the VM operator, so native stack scrapes would duplicate
+        # samples and invalidate the comparison.
+        kubelet:
+          enabled: false
+        kubeApiServer:
+          enabled: false
+        kubeControllerManager:
+          enabled: false
+        kubeDns:
+          enabled: false
+        coreDns:
+          enabled: false
+        kubeEtcd:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeProxy:
+          enabled: false
+
+        defaultDashboards:
+          enabled: false
+        defaultRules:
+          enabled: false
+        syncJob:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: {enabled: true, prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
