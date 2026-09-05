@@ -112,6 +112,12 @@ spec:
               requests: {cpu: 50m, memory: 128Mi}
               limits: {cpu: 300m, memory: 384Mi}
         grafana:
+          sidecar:
+            datasources:
+              # The built-in datasource points at the disabled Prometheus
+              # service. Provision the compatible VMSingle endpoint below
+              # under the same UID so existing dashboards keep working.
+              defaultDatasourceEnabled: false
           additionalDataSources:
             - name: Loki
               uid: loki
@@ -121,12 +127,12 @@ spec:
               jsonData:
                 maxLines: 1000
                 timeout: 60
-            - name: VictoriaMetrics Pilot
-              uid: victoria-metrics-pilot
+            - name: Prometheus
+              uid: prometheus
               type: prometheus
               access: proxy
               url: http://vmsingle-victoria-metrics-pilot-victoria-metrics-k8s-stack.monitoring.svc.cluster.local:8428
-              isDefault: false
+              isDefault: true
               editable: false
               jsonData:
                 prometheusType: Prometheus

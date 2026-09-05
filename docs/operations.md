@@ -28,11 +28,11 @@ Finally, create a Keycloak canary backup and require its Backup and DataUpload r
 
 Use Grafana and Telegram alerts for normal monitoring. Investigate any failed or stale Velero backup, K3s snapshot warning, unhealthy Longhorn volume, certificate expiry, or unavailable endpoint probe. The blackbox exporter checks the LAN-only Jenkins login endpoint from inside the cluster.
 
-VictoriaMetrics currently runs as a non-authoritative resource-usage pilot
-beside Prometheus. Follow [the VictoriaMetrics pilot runbook](victoriametrics-pilot.md)
-for target and rule parity checks, the 72-hour comparison, and the cutover gate.
-Prometheus remains the only source of Alertmanager notifications during the
-pilot.
+VictoriaMetrics is the authoritative metrics store, scraper, and rule evaluator.
+Grafana uses its Prometheus-compatible API under datasource UID `prometheus`, and
+`vmalert` sends notifications to the existing Alertmanager. Follow [the
+VictoriaMetrics operations runbook](victoriametrics-pilot.md) for health checks
+and rollback instructions.
 
 Useful commands:
 
