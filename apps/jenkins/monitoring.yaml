@@ -4,7 +4,7 @@ metadata:
   name: jenkins
   namespace: jenkins
   labels:
-    release: victoria-metrics-pilot
+    release: victoria-metrics-stack
 spec:
   groups:
     - name: homelab.jenkins

@@ -4,7 +4,7 @@ metadata:
   name: dependency-track
   namespace: dependency-track
   labels:
-    release: victoria-metrics-pilot
+    release: victoria-metrics-stack
 spec:
   selector:
     matchLabels:
@@ -22,7 +22,7 @@ metadata:
   name: dependency-track
   namespace: dependency-track
   labels:
-    release: victoria-metrics-pilot
+    release: victoria-metrics-stack
 spec:
   groups:
     - name: dependency-track.vulnerability-sources

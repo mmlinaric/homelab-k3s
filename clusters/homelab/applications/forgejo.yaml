@@ -104,7 +104,7 @@ spec:
             serviceMonitor:
               enabled: true
               additionalLabels:
-                release: victoria-metrics-pilot
+                release: victoria-metrics-stack
           config:
             APP_NAME: Mlinaric Forgejo
             RUN_MODE: prod

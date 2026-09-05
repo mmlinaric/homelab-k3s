@@ -4,7 +4,7 @@ metadata:
   name: vm-kube-proxy-static
   namespace: kube-system
   labels:
-    kubernetes.io/service-name: victoria-metrics-pilot-victoria-metrics-k8s-stack-kube-proxy
+    kubernetes.io/service-name: victoria-metrics-stack-victoria-metrics-k8s-stack-kube-proxy
     endpointslice.kubernetes.io/managed-by: homelab-k3s
 addressType: IPv4
 ports:
