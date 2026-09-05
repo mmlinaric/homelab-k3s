@@ -119,6 +119,9 @@ spec:
               # under the same UID so existing dashboards keep working.
               defaultDatasourceEnabled: false
           prune: true
+          deleteDatasources:
+            - name: VictoriaMetrics Pilot
+              orgId: 1
           additionalDataSources:
             - name: Loki
               uid: loki
