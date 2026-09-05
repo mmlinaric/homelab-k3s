@@ -65,20 +65,25 @@ data:
     timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
     archive="/backups/forgejo-${timestamp}.dump"
     temporary="${archive}.tmp"
+    restore_replicas="$(kubectl -n forgejo get deployment forgejo \
+      --output=jsonpath='{.spec.replicas}')"
+    case "${restore_replicas}" in
+      ''|*[!0-9]*) echo "Invalid Forgejo replica count: ${restore_replicas}" >&2; exit 1 ;;
+    esac
 
     recover() {
-      kubectl -n forgejo scale deployment forgejo --replicas=1 >/dev/null || true
+      kubectl -n forgejo scale deployment forgejo \
+        --replicas="${restore_replicas}" >/dev/null || true
       rm -f "${marker}" "${temporary}"
     }
     trap recover EXIT HUP INT TERM
 
+    printf '%s %s\n' "$(date +%s)" "${restore_replicas}" > "${marker}"
     kubectl -n forgejo scale deployment forgejo --replicas=0
     kubectl -n forgejo wait pod \
       --for=delete \
       --selector=app.kubernetes.io/name=forgejo \
       --timeout=10m
-    date +%s > "${marker}"
-
     dbpod="$(kubectl -n forgejo get pod \
       --selector=cnpg.io/cluster=forgejo-db,role=primary \
       --output=jsonpath='{.items[0].metadata.name}')"
@@ -105,8 +110,11 @@ data:
   post-backup.sh: |
     #!/bin/sh
     set -eu
-    kubectl -n forgejo scale deployment forgejo --replicas=1
-    rm -f /state/backup-in-progress
+    marker=/state/backup-in-progress
+    read -r _ restore_replicas < "${marker}"
+    kubectl -n forgejo scale deployment forgejo \
+      --replicas="${restore_replicas}"
+    rm -f "${marker}"
   watchdog.sh: |
     #!/bin/sh
     set -eu
@@ -114,11 +122,12 @@ data:
     marker=/state/backup-in-progress
     while true; do
       if [ -s "${marker}" ]; then
-        started="$(cat "${marker}")"
+        read -r started restore_replicas < "${marker}"
         now="$(date +%s)"
         if [ "$((now - started))" -gt 1800 ]; then
-          echo "Backup exceeded 30 minutes; restoring Forgejo availability." >&2
-          kubectl -n forgejo scale deployment forgejo --replicas=1 || true
+          echo "Backup exceeded 30 minutes; restoring the prior Forgejo replica count." >&2
+          kubectl -n forgejo scale deployment forgejo \
+            --replicas="${restore_replicas}" || true
           rm -f "${marker}"
         fi
       fi

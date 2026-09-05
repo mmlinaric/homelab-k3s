@@ -14,6 +14,8 @@ spec:
     helm:
       releaseName: forgejo
       valuesObject:
+        # The chart schema requires at least one replica. Argo ignores only
+        # the live replica field below so Forgejo can remain manually paused.
         replicaCount: 1
         strategy:
           type: Recreate
@@ -188,9 +190,15 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: forgejo
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: forgejo
+      namespace: forgejo
+      jsonPointers: [/spec/replicas]
   syncPolicy:
     automated: {enabled: true, prune: true, selfHeal: true}
-    syncOptions: [CreateNamespace=true, ServerSideApply=true, PruneLast=true]
+    syncOptions: [CreateNamespace=true, ServerSideApply=true, PruneLast=true, RespectIgnoreDifferences=true]
     retry:
       limit: 10
       backoff: {duration: 10s, factor: 2, maxDuration: 3m}
