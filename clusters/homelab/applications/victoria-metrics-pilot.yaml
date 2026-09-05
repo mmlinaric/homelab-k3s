@@ -100,9 +100,37 @@ spec:
         defaultDashboards:
           enabled: false
         defaultRules:
-          enabled: false
+          enabled: true
+          # Existing PrometheusRules remain the authoritative Kubernetes and
+          # application rule source. Fetch only VictoriaMetrics self-health
+          # rules here so the cutover does not duplicate existing groups.
+          sources:
+            etcd:
+              enabled: false
+            alertmanager:
+              enabled: false
+            kubernetes-control-plane:
+              enabled: false
+            kubernetes:
+              enabled: false
+            kube-state-metrics:
+              enabled: false
+            node-exporter:
+              enabled: false
+            vmcluster:
+              enabled: false
+            vlhealth:
+              enabled: false
+            vlagent:
+              enabled: false
+            victorialogs:
+              enabled: false
+            victoriatraces:
+              enabled: false
+            vthealth:
+              enabled: false
         syncJob:
-          enabled: false
+          enabled: true
 
         # kube-proxy is exposed through a manually managed EndpointSlice only.
         # The converted ServiceMonitor defaults to legacy Endpoints discovery,
