@@ -118,6 +118,7 @@ spec:
               # service. Provision the compatible VMSingle endpoint below
               # under the same UID so existing dashboards keep working.
               defaultDatasourceEnabled: false
+          prune: true
           additionalDataSources:
             - name: Loki
               uid: loki
@@ -127,6 +128,16 @@ spec:
               jsonData:
                 maxLines: 1000
                 timeout: 60
+            - name: Alertmanager
+              uid: alertmanager
+              type: alertmanager
+              access: proxy
+              url: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093
+              isDefault: false
+              editable: false
+              jsonData:
+                handleGrafanaManagedAlerts: false
+                implementation: prometheus
             - name: Prometheus
               uid: prometheus
               type: prometheus
